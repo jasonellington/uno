@@ -1,0 +1,404 @@
+[
+  {
+    "path": "agents.defaults.systemAgent",
+    "value": {
+      "agentId": "main"
+    }
+  },
+  {
+    "path": "agents.defaults.heartbeat",
+    "value": {
+      "agentId": "main",
+      "target": "none",
+      "every": "0m"
+    }
+  },
+  {
+    "path": "cron.failureAlert.enabled",
+    "value": false
+  },
+  {
+    "path": "agents.defaults.reasoningDefault",
+    "value": "off"
+  },
+  {
+    "path": "plugins.entries.memory-core.config.dreaming.enabled",
+    "value": true
+  },
+  {
+    "path": "plugins.entries.codex.config.appServer.serviceTier",
+    "value": "priority"
+  },
+  {
+    "path": "agents.defaults.fastModeDefault",
+    "value": true
+  },
+  {
+    "path": "agents.defaults.models.openai/gpt-6-sol.params.thinking",
+    "value": "low"
+  },
+  {
+    "path": "agents.defaults.models.openai/gpt-6-luna.params.thinking",
+    "value": "medium"
+  },
+  {
+    "path": "agents.defaults.utilityModel",
+    "value": "openai/gpt-6-luna"
+  },
+  {
+    "path": "plugins.entries.codex.config.codexDynamicToolsLoading",
+    "value": "direct"
+  },
+  {
+    "path": "messages.visibleReplies",
+    "value": "automatic"
+  },
+  {
+    "path": "session.resetByType.direct",
+    "value": {
+      "mode": "daily",
+      "atHour": 4
+    }
+  },
+  {
+    "path": "secrets.providers.brave_key_file",
+    "value": {
+      "source": "file",
+      "path": "~/.openclaw/secrets/brave-api-key.txt",
+      "mode": "singleValue"
+    }
+  },
+  {
+    "path": "plugins.entries.brave.config.webSearch",
+    "value": {
+      "apiKey": {
+        "source": "file",
+        "provider": "brave_key_file",
+        "id": "value"
+      },
+      "mode": "web"
+    }
+  },
+  {
+    "path": "tools.web.search.provider",
+    "value": "brave"
+  },
+  {
+    "path": "plugins.entries.uno-guard.enabled",
+    "value": true
+  },
+  {
+    "path": "plugins.entries.uno-imsg-proxy.enabled",
+    "value": true
+  },
+  {
+    "path": "plugins.entries.uno-family-memory.enabled",
+    "value": true
+  },
+  {
+    "path": "plugins.entries.uno-apple-tools.enabled",
+    "value": true
+  },
+  {
+    "path": "talk.agentId",
+    "value": "main"
+  },
+  {
+    "path": "agents.entries.uno-agent-fallback.sandbox",
+    "value": {
+      "mode": "all",
+      "workspaceAccess": "none",
+      "scope": "agent"
+    }
+  },
+  {
+    "path": "agents.entries.uno-agent-fallback.tools",
+    "value": {
+      "allow": [
+        "uno_fallback_no_tools"
+      ],
+      "elevated": {
+        "enabled": false
+      }
+    }
+  },
+  {
+    "path": "bindings",
+    "value": [
+      {
+        "agentId": "main",
+        "match": {
+          "channel": "imessage",
+          "accountId": "*",
+          "peer": {
+            "kind": "direct",
+            "id": "+15555550100"
+          }
+        }
+      },
+      {
+        "agentId": "main",
+        "match": {
+          "channel": "imessage",
+          "accountId": "*",
+          "peer": {
+            "kind": "direct",
+            "id": "owner@example.com"
+          }
+        }
+      },
+      {
+        "agentId": "uno-agent-fallback",
+        "match": {
+          "channel": "imessage",
+          "accountId": "*"
+        }
+      }
+    ]
+  },
+  {
+    "path": "channels.imessage.dmPolicy",
+    "value": "allowlist"
+  },
+  {
+    "path": "channels.imessage.allowFrom",
+    "value": [
+      "+15555550100",
+      "owner@example.com"
+    ]
+  },
+  {
+    "path": "channels.imessage.groupPolicy",
+    "value": "disabled"
+  },
+  {
+    "path": "channels.imessage.actions",
+    "value": {
+      "reactions": true,
+      "reply": true,
+      "edit": false,
+      "unsend": false,
+      "sendWithEffect": true,
+      "sendAttachment": true,
+      "polls": false,
+      "renameGroup": false,
+      "setGroupIcon": false,
+      "addParticipant": false,
+      "removeParticipant": false,
+      "leaveGroup": false
+    }
+  },
+  {
+    "path": "channels.imessage.sendReadReceipts",
+    "value": true
+  },
+  {
+    "path": "channels.imessage.includeAttachments",
+    "value": true
+  },
+  {
+    "path": "commands.allowFrom.imessage",
+    "value": [
+      "+15555550100",
+      "owner@example.com"
+    ]
+  },
+  {
+    "path": "session.identityLinks",
+    "value": {
+      "me": [
+        "imessage:+15555550100",
+        "imessage:owner@example.com"
+      ]
+    }
+  },
+  {
+    "path": "session.dmScope",
+    "value": "per-channel-peer"
+  },
+  {
+    "path": "tools.sessions.visibility",
+    "value": "self"
+  },
+  {
+    "path": "tools.agentToAgent.enabled",
+    "value": false
+  },
+  {
+    "path": "channels.imessage.streaming.block.enabled",
+    "value": true
+  },
+  {
+    "path": "channels.imessage.streaming.chunkMode",
+    "value": "newline"
+  },
+  {
+    "path": "channels.imessage.streaming.block.coalesce",
+    "value": {
+      "minChars": 1,
+      "idleMs": 0
+    }
+  },
+  {
+    "path": "agents.defaults.blockStreamingChunk",
+    "value": {
+      "minChars": 1,
+      "maxChars": 1500,
+      "breakPreference": "paragraph"
+    }
+  },
+  {
+    "path": "agents.defaults.humanDelay",
+    "value": {
+      "mode": "natural"
+    }
+  },
+  {
+    "path": "agents.defaults.typingMode",
+    "value": "never"
+  },
+  {
+    "path": "plugins.entries.uno-guard.config",
+    "value": {
+      "adminAgentId": "main",
+      "ownerName": "Alex",
+      "fallbackAgentId": "uno-agent-fallback"
+    }
+  },
+  {
+    "path": "plugins.entries.uno-imsg-proxy.hooks.allowConversationAccess",
+    "value": true
+  },
+  {
+    "path": "plugins.entries.uno-guard.hooks.allowConversationAccess",
+    "value": true
+  },
+  {
+    "path": "commands.config",
+    "value": true
+  },
+  {
+    "path": "tools.deny",
+    "value": [
+      "nodes",
+      "mobile_ui",
+      "file_fetch",
+      "file_write",
+      "dir_list",
+      "dir_fetch",
+      "node_inference",
+      "dashboard",
+      "portal",
+      "theme",
+      "terminal",
+      "progress_card",
+      "canvas",
+      "talk_voice",
+      "conversations_list",
+      "conversations_send",
+      "conversations_turn",
+      "agents_list",
+      "github_identity_status",
+      "typesafe_evaluate",
+      "codex_plugins"
+    ]
+  },
+  {
+    "path": "secrets.providers.gateway_token_file",
+    "value": {
+      "source": "file",
+      "path": "~/.openclaw/secrets/gateway-token.txt",
+      "mode": "singleValue"
+    }
+  },
+  {
+    "path": "gateway.auth.token",
+    "value": {
+      "source": "file",
+      "provider": "gateway_token_file",
+      "id": "value"
+    }
+  },
+  {
+    "path": "plugins.entries.apple-pim-cli.config",
+    "value": {
+      "binDir": "~/.local/bin"
+    }
+  },
+  {
+    "path": "skills.entries.notion.enabled",
+    "value": false
+  },
+  {
+    "path": "skills.entries.coding-agent.enabled",
+    "value": true
+  },
+  {
+    "path": "skills.entries.imsg.enabled",
+    "value": false
+  },
+  {
+    "path": "skills.load.extraDirs",
+    "value": [
+      "/Users/uno/.openclaw/uno-data/shared-skills"
+    ]
+  },
+  {
+    "path": "hooks.internal.entries.session-memory.enabled",
+    "value": true
+  },
+  {
+    "path": "agents.entries.main.tools.exec.host",
+    "value": "gateway"
+  },
+  {
+    "path": "agents.entries.main.memory.search.extraPaths",
+    "value": [
+      "/Users/uno/.openclaw/uno-data/family-memory"
+    ]
+  },
+  {
+    "path": "plugins.entries.memory-core.config.memoryPolicy.excludeSessions.chatTypes",
+    "value": [
+      "group"
+    ]
+  },
+  {
+    "path": "plugins.entries.codex.config.sessionCatalog.enabled",
+    "value": false
+  },
+  {
+    "path": "plugins.entries.anthropic.config.sessionCatalog.enabled",
+    "value": false
+  },
+  {
+    "path": "channels.apple-mail",
+    "value": {
+      "selfAddresses": [
+        "uno@example.com"
+      ],
+      "dmPolicy": "allowlist",
+      "allowFrom": []
+    }
+  },
+  {
+    "path": "approvals.plugin",
+    "value": {
+      "enabled": true,
+      "mode": "targets",
+      "targets": [
+        {
+          "channel": "imessage",
+          "to": "+15555550100"
+        }
+      ]
+    }
+  },
+  {
+    "path": "commands.ownerAllowFrom",
+    "value": [
+      "imessage:+15555550100",
+      "imessage:owner@example.com"
+    ]
+  }
+]

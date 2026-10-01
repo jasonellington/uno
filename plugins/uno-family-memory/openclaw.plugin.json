@@ -1,0 +1,43 @@
+{
+  "id": "uno-family-memory",
+  "name": "Uno shared family memory",
+  "description": "Shared family memory, shared skills and the USER.md save tool.",
+  "categories": [
+    "other"
+  ],
+  "contracts": {
+    "tools": [
+      "shared_memory_save",
+      "profile_save",
+      "shared_skill_save"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "dir": {
+        "type": "string",
+        "description": "Folder of the shared store, outside every agent workspace. It must also be in each agent's memory.search.extraPaths. Default ~/.openclaw/uno-data/family-memory."
+      },
+      "names": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "Agent id -> the person's first name, stamped on each shared note so everyone can see whose chat it came from. Unset: no name."
+      },
+      "skillsDir": {
+        "type": "string",
+        "description": "Folder of shared skills, loaded by every agent through skills.load.extraDirs. Default ~/.openclaw/uno-data/shared-skills."
+      },
+      "sharedSites": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Sites a skill must stick to, to be shared. Unset: uno-guard's sharedSites."
+      }
+    }
+  }
+}

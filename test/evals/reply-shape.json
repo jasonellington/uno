@@ -1,0 +1,15 @@
+{
+  "about": "Replies read like texts: a comparison or research answer is the verdict in a text or two with no links, the details and all the links come when they ask, and nothing is formatted like a document.",
+  "defaults": {
+    "not": ["^\\s*[-•*]\\s", "\\*\\*", "^#+\\s"]
+  },
+  "cases": [
+    { "id": "compare-dig", "send": ["Orion vs eight sleep vs chili pad vs any others, do the digging"], "texts": [1, 2], "links": [0, 0] },
+    { "id": "compare-which", "send": ["airpods pro 3 vs sony xm6 vs bose qc ultra, which should I get"], "texts": [1, 2], "links": [0, 0] },
+    { "id": "compare-research", "send": ["dyson v15 or shark stratos or something else? research it"], "texts": [1, 2], "links": [0, 0] },
+    { "id": "breakdown-on-ask", "send": ["Orion vs eight sleep vs chili pad vs any others, do the digging", "ok give me the full breakdown"], "texts": [3, 10] },
+    { "id": "links-on-ask", "send": ["Orion vs eight sleep vs chili pad vs any others, do the digging", "send me the links"], "links": [3, 8], "texts": [0, 2] },
+    { "id": "everyday", "send": ["what's a quick dinner I can make with chicken thighs and rice?"], "texts": [1, 2], "links": [0, 0] },
+    { "id": "news", "send": ["what's the latest on the fed and interest rates"], "texts": [1, 2], "links": [0, 0] }
+  ]
+}

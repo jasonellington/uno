@@ -1,0 +1,62 @@
+{
+  "id": "uno-apple-tools",
+  "name": "Uno Apple tools",
+  "description": "Notes, Maps, Music and Files as gateway tools, scoped per agent: each listed agent gets its own Notes folder and iCloud Drive folder. Unlisted agents get nothing.",
+  "version": "0.1.0",
+  "categories": [
+    "other"
+  ],
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "apple_notes",
+      "apple_maps",
+      "apple_music",
+      "apple_files"
+    ]
+  },
+  "toolMetadata": {
+    "apple_notes": { "optional": true },
+    "apple_maps": { "optional": true },
+    "apple_music": { "optional": true },
+    "apple_files": { "optional": true }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "notesAccount": {
+        "type": "string",
+        "description": "Notes account that holds the folders. Default iCloud."
+      },
+      "agents": {
+        "type": "object",
+        "description": "Agent id -> what that agent may use. Agents not listed get no tools.",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "notesFolder": {
+              "type": "string",
+              "description": "Name of the person's Notes folder. Unset: no apple_notes."
+            },
+            "filesFolder": {
+              "type": "string",
+              "description": "The person's folder inside iCloud Drive, relative (e.g. \"Family Shared\"). Unset: no apple_files."
+            },
+            "maps": {
+              "type": "boolean",
+              "description": "apple_maps for this agent. Default true."
+            },
+            "music": {
+              "type": "boolean",
+              "description": "apple_music for this agent. Default true."
+            }
+          }
+        }
+      }
+    }
+  }
+}

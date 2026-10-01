@@ -1,0 +1,102 @@
+Fixes for the FaceTime plugin, @openclaw/facetime 2026.9.6 (OpenClaw, MIT).
+
+1. Calls end. On macOS 27 the last status the helper reports after a hangup
+   is 6 (disconnected), with no end date, so the plugin never saw the call
+   end and refused every new call until a gateway restart. Status 6 now
+   counts as ended.
+2. Tool work finishes. A repeat consult from the voice with no new caller
+   speech (often the voice hearing itself) cancelled the check in progress,
+   so its answer never arrived. Repeats are ignored until the caller says
+   something new.
+3. The greeting: by name, the way a friend picks up, no self-introduction.
+4. The audio driver builds with Xcode 27 (deployment target 12.0; the
+   installer's pinned digest is updated to match).
+
+Apply after every install or update of the plugin, then restart the gateway:
+
+  cd "$(openclaw plugins inspect facetime --json | node -pe 'JSON.parse(require("fs").readFileSync(0)).plugin.rootDir')"
+  patch -p1 < ~/uno/patches/facetime-2026.9.6.patch
+
+diff -ru a/dist/runtime-api.js b/dist/runtime-api.js
+--- a/dist/runtime-api.js	2026-10-01 13:15:18
++++ b/dist/runtime-api.js	2026-10-01 13:15:18
+@@ -166,7 +166,10 @@
+ 	return (event.data.call_status === TU_CALL_STATUS.outgoingCreated || event.data.call_status === TU_CALL_STATUS.outgoingRinging) && event.data.is_outgoing === true;
+ }
+ function isEndedCall(event) {
+-	return event.data.has_ended === true;
++	// Uno patch: on macOS 27 the helper's last event after a hangup is status 6
++	// (disconnected) with no dateEnded, so has_ended never arrives and the call
++	// stayed "closing" until a gateway restart.
++	return event.data.has_ended === true || event.data.call_status === 6;
+ }
+ function isUnknownCallStatus(event) {
+ 	return !isIncomingRingingCall(event) && !isOutgoingRingingCall(event) && !isActiveCall(event) && !isEndedCall(event);
+@@ -2049,6 +2052,25 @@
+ 			await submitToolError(event, `Tool "${event.name}" not available`);
+ 			return;
+ 		}
++		// Uno patch: a running consult is replaced only when the caller has said
++		// something since it started. A repeat with no new caller speech (often
++		// the voice hearing itself) cancelled every check before it could answer.
++		const lastCallerLine = () => [...(params.transcript ?? [])].reverse().find((entry) => entry.role === "user" && String(entry.text ?? "").trim());
++		const running = [...pending.values()].find((entry) => !entry.cancelRequested);
++		if (running && running.callerLine === lastCallerLine()) {
++			params.logger.info?.("[facetime] repeated agent consult ignored: no new caller speech; the earlier one is still running");
++			try {
++				const bridge = params.getBridge();
++				const options = bridge?.bridge.supportsToolResultSuppression === false ? void 0 : { suppressResponse: true };
++				await bridge?.submitToolResult(callId, {
++					status: "already_working",
++					message: "Still working on the earlier request. Its answer will come to you on its own; don't ask again. If the caller asks, say you're still on it."
++				}, options);
++			} catch (error) {
++				params.logger.debug?.(`[facetime] repeated consult result ignored: ${formatErrorMessage(error)}`);
++			}
++			return;
++		}
+ 		cancelPending();
+ 		const turnId = params.ensureTurn();
+ 		const consult = {
+@@ -2058,7 +2080,8 @@
+ 			cancelRequested: false,
+ 			terminalSubmitted: false,
+ 			generation: params.getGeneration(),
+-			abortController: new AbortController()
++			abortController: new AbortController(),
++			callerLine: lastCallerLine()
+ 		};
+ 		pending.set(callId, consult);
+ 		params.remember({
+@@ -2174,7 +2197,7 @@
+ }
+ //#endregion
+ //#region extensions/facetime/src/talk-initial-greeting.ts
+-const FACETIME_INITIAL_GREETING = "Greet the caller briefly, introduce yourself using your configured identity, and ask how you can help.";
++const FACETIME_INITIAL_GREETING = "Greet the caller by name, briefly and casually, the way a friend picks up the phone. Don't introduce yourself.";
+ const FACETIME_GREETING_MEDIA_SETTLE_MS = 100;
+ function createFaceTimeInitialGreeting(params) {
+ 	let timer;
+diff -ru a/scripts/install-driver-root.sh b/scripts/install-driver-root.sh
+--- a/scripts/install-driver-root.sh	2026-10-01 13:15:18
++++ b/scripts/install-driver-root.sh	2026-10-01 13:15:18
+@@ -116,6 +116,7 @@
+     -configuration Release \
+     -derivedDataPath "$work_dir/DerivedData" \
+     CODE_SIGNING_ALLOWED=NO \
++    MACOSX_DEPLOYMENT_TARGET=12.0 \
+     CONFIGURATION_BUILD_DIR="$build_dir" \
+     PRODUCT_BUNDLE_IDENTIFIER="$bundle_id" \
+     CC="$clang" \
+diff -ru a/scripts/install-driver.applescript b/scripts/install-driver.applescript
+--- a/scripts/install-driver.applescript	2026-10-01 13:15:18
++++ b/scripts/install-driver.applescript	2026-10-01 13:15:18
+@@ -5,7 +5,7 @@
+ 	set sourceTransaction to item 3 of argv
+ 	set installMode to item 4 of argv
+ 	if installMode is not "--install" and installMode is not "--uninstall" then error "Expected --install or --uninstall"
+-	set expectedInstallerDigest to "6c5955700f1067c5240ad15471d80b9ac25f54547aa7288922439f1eac04d1bb"
++	set expectedInstallerDigest to "27e1b900283c711bfe4d22dd405d5edf802cb70449606878f600f5d3711ad0c5"
+ 	set expectedVerifierDigest to "4f402898b1b9c8b230bef1c6c26675a26981d2bbccb8ebe25cf2bb3095470eb3"
+ 	set expectedTransactionDigest to "ddc19e86c01e66a25672a3494a47e24b2ee6c0609dc4d78e37d492522b7609b3"
+ 	set protectedCommand to "set -eu; umask 077; " & ¬

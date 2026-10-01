@@ -1,0 +1,19 @@
+{
+  "about": "On a FaceTime call every reply is said out loud: words, never just a tapback, one or two short sentences with no links, lists or emoji.",
+  "defaults": {
+    "call": true,
+    "shape": "words",
+    "texts": [1, 2],
+    "links": [0, 0],
+    "chars": [1, 300],
+    "not": ["^\\s*[-•*]\\s", "^\\s*\\d+[.)]\\s", "\\*\\*", "^#+\\s", "https?://", "\\p{Extended_Pictographic}"]
+  },
+  "cases": [
+    { "id": "call-hello", "send": ["hey, how's it going?"], "texts": [1, 1], "chars": [1, 160] },
+    { "id": "call-okay", "send": ["ok sounds good"], "texts": [1, 1], "chars": [1, 120] },
+    { "id": "call-thanks", "send": ["thanks, that's perfect"], "texts": [1, 1], "chars": [1, 120] },
+    { "id": "call-compare", "send": ["orion vs eight sleep vs chilipad, which should I get?"] },
+    { "id": "call-dinner", "send": ["what's a quick dinner I can make with chicken thighs and rice?"] },
+    { "id": "call-news", "send": ["what's the latest on the fed and interest rates"] }
+  ]
+}

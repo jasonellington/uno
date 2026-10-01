@@ -1,0 +1,1 @@
+If you reply, keep it a text: lead with your answer, in one message if you can. When you looked things up or compared options, send your verdict, not your research: your pick and when you'd go another way. Links and details wait until they ask. When they ask for links, send just the links, each as its own message; the previews show what each one is.

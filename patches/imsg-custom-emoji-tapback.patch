@@ -1,0 +1,340 @@
+Custom emoji tapbacks for imsg (https://github.com/openclaw/imsg).
+imsg is MIT licensed, Copyright (c) 2026 Peter Steinberger; see its LICENSE.
+
+Lets `imsg tapback --emoji <emoji>` send and remove any single-emoji
+tapback (Messages types 2006/3006), not just the six classic kinds. Made
+against v0.15.9; applies cleanly to v0.15.10. Uno works without it: the six
+classic tapbacks still go through, and Uno is told to use one of them.
+
+Build and install: docs/install.md, "Custom emoji reactions (optional)".
+
+diff --git a/Sources/IMsgCore/IMsgBridgeProtocol.swift b/Sources/IMsgCore/IMsgBridgeProtocol.swift
+index ba37086..9cbb082 100644
+--- a/Sources/IMsgCore/IMsgBridgeProtocol.swift
++++ b/Sources/IMsgCore/IMsgBridgeProtocol.swift
+@@ -110,7 +110,8 @@ public enum BridgeAction: String, Sendable, CaseIterable {
+ /// Reaction kinds (BlueBubbles vocabulary) → IMAssociatedMessageType integers.
+ ///
+ /// Constants are stable across macOS 11–15. Add 1000 to the kind id to send a
+-/// removal (e.g. `love` → 2000, `remove-love` → 3000).
++/// removal (e.g. `love` → 2000, `remove-love` → 3000). `custom` is an emoji
++/// tapback (2006/3006); the emoji travels separately in the `emoji` param.
+ public enum BridgeReactionKind: String, Sendable, CaseIterable {
+   case love
+   case like
+@@ -118,12 +119,14 @@ public enum BridgeReactionKind: String, Sendable, CaseIterable {
+   case laugh
+   case emphasize
+   case question
++  case custom
+   case removeLove = "remove-love"
+   case removeLike = "remove-like"
+   case removeDislike = "remove-dislike"
+   case removeLaugh = "remove-laugh"
+   case removeEmphasize = "remove-emphasize"
+   case removeQuestion = "remove-question"
++  case removeCustom = "remove-custom"
+ 
+   public var associatedMessageType: Int {
+     switch self {
+@@ -133,12 +136,14 @@ public enum BridgeReactionKind: String, Sendable, CaseIterable {
+     case .laugh: return 2003
+     case .emphasize: return 2004
+     case .question: return 2005
++    case .custom: return 2006
+     case .removeLove: return 3000
+     case .removeLike: return 3001
+     case .removeDislike: return 3002
+     case .removeLaugh: return 3003
+     case .removeEmphasize: return 3004
+     case .removeQuestion: return 3005
++    case .removeCustom: return 3006
+     }
+   }
+ }
+diff --git a/Sources/IMsgHelper/ReactionHandlers.inc b/Sources/IMsgHelper/ReactionHandlers.inc
+index 68ac07a..d650a38 100644
+--- a/Sources/IMsgHelper/ReactionHandlers.inc
++++ b/Sources/IMsgHelper/ReactionHandlers.inc
+@@ -1,3 +1,52 @@
++/// Custom emoji tapback (2006/3006) via Messages' own factory:
++/// `-[IMEmojiTapback initWithEmoji:isRemoved:]` then
++/// `-[IMTapback messageForChat:messageGUID:messagePartRange:messageSummaryInfo:threadIdentifier:]`.
++/// The factory writes the emoji, type and "Reacted ✅ to …" body itself, so
++/// nothing here depends on the private emoji setter. Both selectors exist on
++/// macOS 27; older systems get a clean error.
++static NSDictionary *sendCustomEmojiReaction(NSInteger requestId, IMChat *chat,
++                                             NSString *chatGuid, NSString *selectedMessageGuid,
++                                             NSString *reactionType, NSString *emoji,
++                                             BOOL removed, NSString *associatedRef,
++                                             NSRange targetRange, NSDictionary *summary) {
++    Class tapbackClass = NSClassFromString(@"IMEmojiTapback");
++    SEL initSel = NSSelectorFromString(@"initWithEmoji:isRemoved:");
++    SEL messageSel = NSSelectorFromString(
++        @"messageForChat:messageGUID:messagePartRange:messageSummaryInfo:threadIdentifier:");
++    if (!tapbackClass || ![tapbackClass instancesRespondToSelector:initSel]
++        || ![tapbackClass instancesRespondToSelector:messageSel]) {
++        return errorResponse(requestId,
++            @"Custom emoji tapbacks are not supported on this macOS (IMEmojiTapback missing)");
++    }
++    debugLog(@"handleSendReaction: custom target=%@ emoji=%@ removed=%d range={%lu,%lu}",
++             associatedRef, emoji, removed,
++             (unsigned long)targetRange.location, (unsigned long)targetRange.length);
++    @try {
++        id tapback = ((id (*)(id, SEL, id, BOOL))objc_msgSend)(
++            [tapbackClass alloc], initSel, emoji, removed);
++        id imMessage = tapback
++            ? ((id (*)(id, SEL, id, id, NSRange, id, id))objc_msgSend)(
++                  tapback, messageSel, chat, associatedRef, targetRange, summary, nil)
++            : nil;
++        if (!imMessage) {
++            return errorResponse(requestId, @"Could not build custom tapback IMMessage");
++        }
++        [chat performSelector:@selector(sendMessage:) withObject:imMessage];
++        debugLog(@"handleSendReaction: custom dispatched");
++        NSString *guid = outgoingMessageGuid(imMessage);
++        return successResponse(requestId, @{
++            @"chatGuid": chatGuid,
++            @"selectedMessageGuid": selectedMessageGuid,
++            @"reactionType": reactionType,
++            @"emoji": emoji,
++            @"messageGuid": guid ?: @""
++        });
++    } @catch (NSException *exception) {
++        return errorResponse(requestId,
++            [NSString stringWithFormat:@"send-reaction failed: %@", exception.reason]);
++    }
++}
++
+ static NSDictionary *handleSendReaction(NSInteger requestId, NSDictionary *params) {
+     NSString *chatGuid = params[@"chatGuid"];
+     NSString *selectedMessageGuid = params[@"selectedMessageGuid"];
+@@ -21,6 +70,7 @@ static NSDictionary *handleSendReaction(NSInteger requestId, NSDictionary *param
+         @"laugh": @2003, @"emphasize": @2004, @"question": @2005,
+         @"remove-love": @3000, @"remove-like": @3001, @"remove-dislike": @3002,
+         @"remove-laugh": @3003, @"remove-emphasize": @3004, @"remove-question": @3005,
++        @"custom": @2006, @"remove-custom": @3006,
+     };
+     NSNumber *typeNum = kindMap[reactionType.lowercaseString];
+     if (typeNum) associatedType = [typeNum longLongValue];
+@@ -29,6 +79,12 @@ static NSDictionary *handleSendReaction(NSInteger requestId, NSDictionary *param
+             [NSString stringWithFormat:@"Unknown reactionType: %@", reactionType]);
+     }
+ 
++    NSString *emoji = [params[@"emoji"] isKindOfClass:[NSString class]] ? params[@"emoji"] : nil;
++    BOOL isCustom = associatedType == 2006 || associatedType == 3006;
++    if (isCustom && !emoji.length) {
++        return errorResponse(requestId, @"Custom tapback needs an emoji");
++    }
++
+     NSString *targetGUID = nil;
+     // Embedded parts already take precedence over the wrappers' default partIndex=0.
+     if (!resolveMessagePartTarget(selectedMessageGuid, &targetGUID, &partIndex)) {
+@@ -93,6 +149,12 @@ static NSDictionary *handleSendReaction(NSInteger requestId, NSDictionary *param
+              (unsigned long)targetRange.location, (unsigned long)targetRange.length,
+              quoted);
+ 
++    if (isCustom) {
++        return sendCustomEmojiReaction(requestId, chat, chatGuid, selectedMessageGuid,
++                                       reactionType, emoji, associatedType == 3006,
++                                       associatedRef, targetRange, summary);
++    }
++
+     @try {
+         id imMessage = buildIMMessage(body, nil, nil, nil,
+                                       nil,
+diff --git a/Sources/imsg/Commands/BridgeMessagingCommands.swift b/Sources/imsg/Commands/BridgeMessagingCommands.swift
+index 76c72e4..3664997 100644
+--- a/Sources/imsg/Commands/BridgeMessagingCommands.swift
++++ b/Sources/imsg/Commands/BridgeMessagingCommands.swift
+@@ -17,7 +17,10 @@ enum BridgeReactCommand {
+           .make(label: "message", names: [.long("message")], help: "target message guid"),
+           .make(
+             label: "kind", names: [.long("kind")],
+-            help: "love|like|dislike|laugh|emphasize|question"),
++            help: "love|like|dislike|laugh|emphasize|question, or a single emoji"),
++          .make(
++            label: "emoji", names: [.long("emoji")],
++            help: "custom emoji tapback, e.g. ✅ (same as --kind with an emoji)"),
+           .make(label: "part", names: [.long("part")], help: "part index"),
+         ],
+         flags: [
+@@ -28,7 +31,8 @@ enum BridgeReactCommand {
+       )
+     ),
+     usageExamples: [
+-      "imsg tapback --chat 'iMessage;-;+15551234567' --message ABCD-EFGH --kind love"
++      "imsg tapback --chat 'iMessage;-;+15551234567' --message ABCD-EFGH --kind love",
++      "imsg tapback --chat 'iMessage;-;+15551234567' --message ABCD-EFGH --emoji ✅",
+     ]
+   ) { values, runtime in
+     try await run(values: values, runtime: runtime)
+@@ -41,20 +45,18 @@ enum BridgeReactCommand {
+     guard let message = values.option("message"), !message.isEmpty else {
+       throw ParsedValuesError.missingOption("message")
+     }
+-    guard let kind = values.option("kind"), !kind.isEmpty else {
++    guard let kind = values.option("emoji") ?? values.option("kind"), !kind.isEmpty else {
+       throw ParsedValuesError.missingOption("kind")
+     }
+-    let normalized = kind.lowercased()
+-    let prefixed = values.flag("remove") ? "remove-\(normalized)" : normalized
+-    let params: [String: Any] = [
+-      "chatGuid": chat,
+-      "selectedMessageGuid": message,
+-      "reactionType": prefixed,
+-      "partIndex": try values.optionInt("part", minimum: 0) ?? 0,
+-    ]
++    var params = try bridgeReactionParams(kind, remove: values.flag("remove"))
++    params["chatGuid"] = chat
++    params["selectedMessageGuid"] = message
++    params["partIndex"] = try values.optionInt("part", minimum: 0) ?? 0
++    let label = [params["reactionType"], params["emoji"]].compactMap { $0 as? String }
++      .joined(separator: " ")
+     _ = try await BridgeOutput.invokeAndEmit(
+       action: .sendReaction, params: params, runtime: runtime
+-    ) { _ in "tapback: \(prefixed) sent" }
++    ) { _ in "tapback: \(label) sent" }
+   }
+ }
+ 
+diff --git a/Sources/imsg/RPCServer+BridgeMessageHandlers.swift b/Sources/imsg/RPCServer+BridgeMessageHandlers.swift
+index 9c884b8..57537a0 100644
+--- a/Sources/imsg/RPCServer+BridgeMessageHandlers.swift
++++ b/Sources/imsg/RPCServer+BridgeMessageHandlers.swift
+@@ -230,20 +230,14 @@ extension RPCServer {
+     let remove = try params.boolean("remove") ?? false
+     let partIndex = try params.integer("part_index", aliases: ["partIndex"]) ?? 0
+     let chatGUID = try await resolveChatGUIDParam(params)
+-    let reactionType = try normalizeBridgeReactionType(
+-      rawReaction,
+-      remove: remove
+-    )
+-    _ = try await invokeBridge(
+-      action: .sendReaction,
+-      params: [
+-        "chatGuid": chatGUID,
+-        "selectedMessageGuid": messageGUID,
+-        "reactionType": reactionType,
+-        "partIndex": partIndex,
+-      ]
+-    )
+-    respond(id: id, result: ["ok": true, "reaction": reactionType])
++    var bridgeParams = try bridgeReactionParams(rawReaction, remove: remove)
++    bridgeParams["chatGuid"] = chatGUID
++    bridgeParams["selectedMessageGuid"] = messageGUID
++    bridgeParams["partIndex"] = partIndex
++    _ = try await invokeBridge(action: .sendReaction, params: bridgeParams)
++    var result: [String: Any] = ["ok": true, "reaction": bridgeParams["reactionType"] ?? ""]
++    if let emoji = bridgeParams["emoji"] { result["emoji"] = emoji }
++    respond(id: id, result: result)
+   }
+ 
+   func handleMessageEdit(params: [String: Any], id: Any?) async throws {
+diff --git a/Sources/imsg/RPCServer+BridgeMessageSupport.swift b/Sources/imsg/RPCServer+BridgeMessageSupport.swift
+index a8bc247..df59c8d 100644
+--- a/Sources/imsg/RPCServer+BridgeMessageSupport.swift
++++ b/Sources/imsg/RPCServer+BridgeMessageSupport.swift
+@@ -61,7 +61,7 @@ func normalizeBridgeReactionType(_ raw: String, remove: Bool = false) throws ->
+     normalized = "question"
+   default:
+     throw RPCError.invalidParams(
+-      "unsupported tapback reaction \(raw); use love, like, dislike, laugh, emphasize, or question"
++      "unsupported tapback reaction \(raw); use love, like, dislike, laugh, emphasize, question, or a single emoji"
+     )
+   }
+   let result = shouldRemove ? "remove-\(normalized)" : normalized
+@@ -71,6 +71,39 @@ func normalizeBridgeReactionType(_ raw: String, remove: Bool = false) throws ->
+   return result
+ }
+ 
++/// Bridge params for a tapback: the six classic kinds (and their emoji
++/// aliases) keep their kind; any other single emoji becomes `custom` /
++/// `remove-custom` with the emoji alongside.
++func bridgeReactionParams(_ raw: String, remove: Bool = false) throws -> [String: Any] {
++  do {
++    return ["reactionType": try normalizeBridgeReactionType(raw, remove: remove)]
++  } catch {
++    var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
++    var shouldRemove = remove
++    if value.lowercased().hasPrefix("remove-") {
++      shouldRemove = true
++      value.removeFirst("remove-".count)
++    }
++    guard isSingleEmoji(value) else { throw error }
++    return [
++      "reactionType": shouldRemove
++        ? BridgeReactionKind.removeCustom.rawValue : BridgeReactionKind.custom.rawValue,
++      "emoji": value,
++    ]
++  }
++}
++
++/// One grapheme that renders as emoji: emoji presentation by default, or a
++/// text-default emoji forced with VS16 / built from several scalars (ZWJ,
++/// skin tone, flags). Plain digits and symbols like "#" don't count.
++func isSingleEmoji(_ value: String) -> Bool {
++  guard value.count == 1, let character = value.first else { return false }
++  let scalars = character.unicodeScalars
++  if scalars.contains(where: { $0.properties.isEmojiPresentation }) { return true }
++  guard scalars.first?.properties.isEmoji == true else { return false }
++  return scalars.count > 1
++}
++
+ extension RPCServer {
+   func bridgeSendVerificationBaseline() async throws -> (
+     database: RPCDatabaseResources, rowID: Int64
+diff --git a/Tests/IMsgCoreTests/IMsgBridgeProtocolTests.swift b/Tests/IMsgCoreTests/IMsgBridgeProtocolTests.swift
+index 41a3896..16c3ad3 100644
+--- a/Tests/IMsgCoreTests/IMsgBridgeProtocolTests.swift
++++ b/Tests/IMsgCoreTests/IMsgBridgeProtocolTests.swift
+@@ -32,6 +32,8 @@ struct IMsgBridgeProtocolTests {
+     #expect(BridgeReactionKind.laugh.associatedMessageType == 2003)
+     #expect(BridgeReactionKind.emphasize.associatedMessageType == 2004)
+     #expect(BridgeReactionKind.question.associatedMessageType == 2005)
++    #expect(BridgeReactionKind.custom.associatedMessageType == 2006)
++    #expect(BridgeReactionKind.removeCustom.associatedMessageType == 3006)
+     // Removal kinds are exactly +1000.
+     for kind in BridgeReactionKind.allCases where !kind.rawValue.hasPrefix("remove-") {
+       let removeName = "remove-\(kind.rawValue)"
+diff --git a/Tests/imsgTests/RPCBridgeMessageHandlersTests.swift b/Tests/imsgTests/RPCBridgeMessageHandlersTests.swift
+index bb87c80..a1aa0e5 100644
+--- a/Tests/imsgTests/RPCBridgeMessageHandlersTests.swift
++++ b/Tests/imsgTests/RPCBridgeMessageHandlersTests.swift
+@@ -54,6 +54,36 @@ func rpcNormalizesTapbackReactionAliases() throws {
+   #expect(try normalizeBridgeReactionType("remove-like") == "remove-like")
+ }
+ 
++@Test
++func rpcTapbackParamsKeepClassicKindsAndCarryCustomEmoji() throws {
++  // Classic kinds and their emoji aliases stay classic, with no emoji param.
++  for (raw, kind) in [
++    ("👍", "like"), ("👎", "dislike"), ("❤️", "love"), ("😂", "laugh"), ("‼️", "emphasize"),
++    ("❓", "question"), ("love", "love"),
++  ] {
++    let params = try bridgeReactionParams(raw)
++    #expect(params["reactionType"] as? String == kind)
++    #expect(params["emoji"] == nil)
++  }
++  for emoji in ["🎉", "🔥", "💯", "👀", "🙏", "✅", "👍🏽", "❤️‍🔥", "🇺🇸"] {
++    let params = try bridgeReactionParams(emoji)
++    #expect(params["reactionType"] as? String == "custom")
++    #expect(params["emoji"] as? String == emoji)
++  }
++  let removal = try bridgeReactionParams("✅", remove: true)
++  #expect(removal["reactionType"] as? String == "remove-custom")
++  #expect(removal["emoji"] as? String == "✅")
++  #expect(try bridgeReactionParams("remove-✅")["reactionType"] as? String == "remove-custom")
++  #expect(try bridgeReactionParams("👍", remove: true)["reactionType"] as? String == "remove-like")
++}
++
++@Test
++func rpcTapbackParamsRejectNonEmoji() {
++  for raw in ["", "wave", "✅✅", "1", "#", "ok 👍"] {
++    #expect(throws: RPCError.self) { try bridgeReactionParams(raw) }
++  }
++}
++
+ @Test
+ func rpcSendRichInvokesBridgeWithResolvedChat() async throws {
+   let store = try CommandTestDatabase.makeStoreForRPC()

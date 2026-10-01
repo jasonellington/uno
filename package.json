@@ -1,0 +1,10 @@
+{
+  "name": "uno",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "eval": "node test/evals/run.mjs"
+  }
+}

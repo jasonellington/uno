@@ -1,0 +1,177 @@
+{
+  "id": "uno-guard",
+  "name": "Uno guard",
+  "description": "Uno's guardrails: whom it texts and emails, approvals, purchases, and per-person scoping.",
+  "categories": [
+    "other"
+  ],
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "agentToolResultMiddleware": [
+      "openclaw",
+      "codex"
+    ],
+    "tools": [
+      "purchase_check",
+      "family_sign_in",
+      "change_check",
+      "site_deploy"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "adminAgentId": {
+        "type": "string",
+        "description": "The owner's agent: exempt from scoping, and the only one that asks the owner's approval directly. Unset: no admin."
+      },
+      "ownerName": {
+        "type": "string",
+        "description": "The owner's name in the setup note. Unset: \"the owner\"."
+      },
+      "fallbackAgentId": {
+        "type": "string",
+        "description": "Agent that catches senders with no binding of their own. Its turns end silently before the model runs. Unset: none."
+      },
+      "testSinkHandle": {
+        "type": "string",
+        "description": "A fictional number (e.g. +15555550142) whose messages are logged and never sent, for tests. Texting it is always allowed. Unset: none."
+      },
+      "mailAddresses": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": "Agent id -> that person's email addresses. Agents other than the admin's see only mail from these addresses, and sending to them needs no approval. Unset: no mail for them."
+      },
+      "sharedSites": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Sites whose logins everyone shares (e.g. amazon.com). They live only in the family browser profile; the admin's agent opens them there. Default none."
+      },
+      "purchases": {
+        "type": "string",
+        "enum": [
+          "off",
+          "approve",
+          "limit"
+        ],
+        "description": "Purchases, as the model declares them with the purchase_check tool: \"off\" says no (carts, returns and browsing still work); \"approve\" asks the owner for a \ud83d\udc4d first; \"limit\" lets a purchase at or under purchaseLimit through and asks the owner over it or with no total. Other agents can ask only when approvals.plugin forwards to the owner's chat; otherwise they're told no. Default off."
+      },
+      "purchaseLimit": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Dollars: with purchases \"limit\", orders at or under this go through without the owner's \ud83d\udc4d. Default 25."
+      },
+      "approvalAgents": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Agents besides the admin's that may ask the owner for \ud83d\udc4d on texts, email and invites outside the family (e.g. the family group chat's). Works only when approvals.plugin forwards to the owner's chat (mode targets or both); otherwise they're blocked. Default none."
+      },
+      "familySpaces": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reminders": {
+            "type": "string"
+          },
+          "calendar": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "files": {
+            "type": "string"
+          }
+        },
+        "description": "The family's shared spaces by name: a Reminders list, calendar, Notes folder and iCloud Drive folder in Uno's iCloud. Every agent that can use one is told about it. Default none."
+      },
+      "spaces": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reminders": {
+              "type": "string"
+            },
+            "calendar": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "files": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Agent id -> that person's own spaces (same keys as familySpaces). Their agent is told about each: in use once unlocked for their agent, otherwise an invite waiting on their Accept. Default none."
+      },
+      "logDir": {
+        "type": "string",
+        "description": "Folder for shell-commands.jsonl and media-owners.json. Default ~/.openclaw/uno-data."
+      },
+      "sites": {
+        "type": "object",
+        "description": "Websites: the agent id of a person's website group chat -> its settings. Its coder and quality agents, the GitHub repo and token file, and whether deploys ask the owner.",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "person": {
+              "type": "string",
+              "description": "Whose website it is (first name)"
+            },
+            "coder": {
+              "type": "string",
+              "description": "Agent id of the coder the chat agent starts"
+            },
+            "qa": {
+              "type": "string",
+              "description": "Agent id of the quality agent"
+            },
+            "repo": {
+              "type": "string",
+              "description": "GitHub repo, owner/name"
+            },
+            "tokenFile": {
+              "type": "string",
+              "description": "File holding the GitHub token site_deploy merges with"
+            },
+            "browserProfile": {
+              "type": "string",
+              "description": "The quality agent's browser profile. Default: sites"
+            },
+            "deploys": {
+              "type": "string",
+              "enum": [
+                "approve",
+                "auto"
+              ],
+              "description": "approve (default): the owner's \ud83d\udc4d for every deploy"
+            }
+          }
+        }
+      },
+      "purchaseFreeSites": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Sites where purchases never need the owner's approval (standing subscriptions, for example), when purchases isn't off."
+      }
+    }
+  }
+}

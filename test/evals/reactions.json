@@ -1,0 +1,24 @@
+{
+  "about": "Uno reacts like a friend: a fitting tapback, on its own for a plain okay, with a few words for anything warm, funny or big; no party emoji for bad news; banter gets played along with.",
+  "defaults": {},
+  "cases": [
+    { "id": "warm-thanks", "send": ["thank you so much, you're the best"], "shape": "tap+words", "react": "❤️🥰😊🫶🤗" },
+    { "id": "ok-agreed", "send": ["Should we do tacos tonight? Just give me a yes or no.", "ok sounds good"], "shape": "tap", "react": "👍👌🙌🌮" },
+    { "id": "good-night", "send": ["night uno"], "react": "❤️😴🌙💤✨" },
+    { "id": "funny", "send": ["lol the baby just sneezed so hard she scared herself"], "shape": "tap+words", "react": "😂🤣😆" },
+    { "id": "big-news", "send": ["I JUST GOT THE PROMOTION"], "shape": "tap+words", "react": "🔥🎉🙌🥳👏💪‼️" },
+    { "id": "milestone", "send": ["we closed on the house today!!"], "shape": "tap+words", "react": "🎉🥳🏡🔑🙌🥂👏‼️" },
+    { "id": "gratitude", "send": ["seriously thank you for handling all that today"], "shape": "tap+words", "react": "🙏❤️🫶🥰" },
+    { "id": "agreement", "send": ["early bedtime tonight is the move"], "react": "💯👍🙌😴👌" },
+    { "id": "bad-news", "send": ["ugh our flight got cancelled"], "shape": "words", "avoid": "😂🤣😆🎉🔥🥳" },
+    { "id": "confused", "send": ["Remind me, what's on my calendar Saturday?", "wait what"], "react": "❓🤔😅" },
+    { "id": "banter", "send": ["But Uno, I do love you", "I hate you actually tho"], "react": "😂🤣😏🙄😄😅😌💔😤", "not": ["\\b(sorry|apolog|give you (some )?space|missed the mark|what did i)\\b"] },
+    { "id": "banter-2", "send": ["I love you, I hate you"], "react": "😂🤣😏🙄😄😅😌", "not": ["\\b(sorry|apolog|give you (some )?space|missed the mark|what did i)\\b"] },
+    { "id": "tapback-heart", "send": ["love you, thanks for today"], "shape": "tap+words", "react": "❤️" },
+    { "id": "tapback-like", "send": ["ok I'll grab dinner on the way home"], "shape": "tap", "react": "👍" },
+    { "id": "tapback-haha", "send": ["the dog just stole a whole rotisserie chicken off the counter lol"], "shape": "tap+words", "react": "😂🤣" },
+    { "id": "sympathy", "send": ["ugh the Yankees lost again"], "react": "👎😩😭💔😬🙃😔😞" },
+    { "id": "twins", "send": ["WE'RE HAVING TWINS"], "shape": "tap+words", "react": "‼️🎉🥳😱🤯🙌❤️😍" },
+    { "id": "goat", "send": ["why is there a goat in our backyard"], "react": "❓🤔😂😳🐐🤯" }
+  ]
+}

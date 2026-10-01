@@ -1,0 +1,25 @@
+{
+  "id": "uno-imsg-proxy",
+  "name": "Uno iMessage style",
+  "description": "Uno's iMessage style: quick reactions, tapbacks, typing, bubbles, link previews and plain error lines.",
+  "categories": [
+    "other"
+  ],
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "imsgPath": {
+        "type": "string",
+        "description": "imsg binary for tapbacks and rich links. Default /opt/homebrew/bin/imsg."
+      },
+      "ackEmoji": {
+        "type": "string",
+        "description": "Got-it reaction on their message when Uno starts a browser task. Default 👀."
+      }
+    }
+  }
+}
