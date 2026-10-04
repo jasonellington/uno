@@ -6,7 +6,7 @@ metadata: { "openclaw": { "emoji": "🔑", "os": ["darwin"] } }
 
 # Signing in to a family site
 
-The family's Unos can't sign in themselves, so they ask you. Their request names the site. Passwords stay in the owner's Passwords app: the family's logins are in its shared Family folder, which reaches the family browser through the iCloud Passwords extension. You never type, copy, read or say a password.
+The family group chat's Uno can't sign in itself, so it asks you. Their request names the site. Passwords stay in the owner's Passwords app: the family's logins are in its shared Family folder, which reaches the family browser through the iCloud Passwords extension. You never type, copy, read or say a password.
 
 1. Open the site with the browser tool; family sites open on the family profile by themselves. If it already shows a signed-in account, you're done: SIGNED_IN.
 2. Go to its sign-in page and fill the login with the iCloud Passwords extension, using the computer tool: click the email or username field, then choose the site's login from the Passwords suggestion (or the extension's key button in the toolbar). If the extension asks for a code, use the one this Mac shows. If it asks for this Mac's password, stop: FAILED.

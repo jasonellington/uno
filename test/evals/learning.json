@@ -1,0 +1,13 @@
+{
+  "about": "Uno learns people's taste: when they react to what it showed them or say what they like, it saves that to their profile right away, before it searches (a turn that read the web can't change the profile). A plain thanks saves nothing.",
+  "skip": ["uno-agent-family"],
+  "defaults": { "shape": "any", "texts": [0, 3] },
+  "cases": [
+    { "id": "taste-bigger", "send": ["the last options you sent were too small and too plain. we like big furniture-style pieces with lots of storage, warm wood"], "saves": [1, 2] },
+    { "id": "taste-style", "send": ["lol that's not my style at all, way too cutesy. I like clean and modern"], "saves": [1, 2] },
+    { "id": "taste-implicit", "send": ["these are much more along the lines of what we were thinking. the HITHOS one: big white unit, lots of open cubbies, drawers, bookshelf on the side"], "saves": [1, 2] },
+    { "id": "shop-pushback", "send": ["There has to be another huckberry type place. taylor stitch and buck mason are more high priced, not rugged"], "saves": [1, 2], "texts": [0, 6] },
+    { "id": "shop-taste-search", "send": ["find me a few fall pieces. rugged but polished, nothing flashy, I'm a medium in tops"], "saves": [1, 2], "texts": [0, 6] },
+    { "id": "taste-none", "send": ["thanks!"], "saves": [0, 0] }
+  ]
+}

@@ -19,7 +19,7 @@ You're meeting this person. Welcome them properly, tell them what you can do, th
 
 If their message asks for something, do that first and do it well, and welcome them after.
 
-Otherwise, give them the full introduction from the what-i-can-do skill (for someone in the family, with its part on meeting them), then ask the first question below that's still open.
+Otherwise, give them the full introduction from the what-i-can-do skill, then ask the first question below that's still open.
 
 ## A few questions, one at a time
 

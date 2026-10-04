@@ -1,4 +1,4 @@
-Fixes for the FaceTime plugin, @openclaw/facetime 2026.9.6 (OpenClaw, MIT).
+Fixes for the FaceTime plugin, @openclaw/facetime 2026.9.6 and 2026.9.7 (OpenClaw, MIT).
 
 1. Calls end. On macOS 27 the last status the helper reports after a hangup
    is 6 (disconnected), with no end date, so the plugin never saw the call
@@ -8,19 +8,38 @@ Fixes for the FaceTime plugin, @openclaw/facetime 2026.9.6 (OpenClaw, MIT).
    speech (often the voice hearing itself) cancelled the check in progress,
    so its answer never arrived. Repeats are ignored until the caller says
    something new.
-3. The greeting: by name, the way a friend picks up, no self-introduction.
-4. The audio driver builds with Xcode 27 (deployment target 12.0; the
+3. No talking to itself. The far end sent Uno's own voice back, and the
+   voice took it for the caller: it cut itself off mid-sentence and answered
+   itself in a loop. While Uno's voice plays, and for a second after, the
+   caller's audio reaches the model as silence, unless it's well above the
+   echo predicted from what Uno just said (the call's echo level is learned
+   from the first 3 s of Uno's speech): then it's the caller talking over
+   Uno, and it goes through. Each of Uno's turns logs an "echo gate" line
+   with the levels.
+4. Work survives a hang-up. Hanging up cancelled the agent's run, so a task
+   asked for on the call (and its text) died with it. The run now finishes;
+   only its spoken answer is dropped.
+5. Bye, not a hang-up. The voice ended the call the moment the caller said
+   they were going to hang up. Now it says bye and lets them hang up, and
+   ends the call only when asked to, after saying bye.
+6. The greeting: by name, the way a friend picks up, no self-introduction.
+7. The audio driver builds with Xcode 27 (deployment target 12.0; the
    installer's pinned digest is updated to match).
+8. No leftover audio capture. A call whose end couldn't be confirmed keeps
+   its facetime-audio-capture running on purpose (fail-closed); after a
+   gateway restart it was orphaned for good, ~15% of a core each (six of
+   them from Oct 1 ran for a day). When a call ends with FaceTime's carrier
+   confirmed closed, captures an earlier gateway left behind (parent is
+   launchd) are stopped, logged as "stopped N leftover audio capture".
 
 Apply after every install or update of the plugin, then restart the gateway:
 
   cd "$(openclaw plugins inspect facetime --json | node -pe 'JSON.parse(require("fs").readFileSync(0)).plugin.rootDir')"
   patch -p1 < ~/uno/patches/facetime-2026.9.6.patch
 
-diff -ru a/dist/runtime-api.js b/dist/runtime-api.js
---- a/dist/runtime-api.js	2026-10-01 13:15:18
-+++ b/dist/runtime-api.js	2026-10-01 13:15:18
-@@ -166,7 +166,10 @@
+--- a/dist/runtime-api.js	1985-10-26 04:15:00
++++ b/dist/runtime-api.js	2026-10-02 19:25:05
+@@ -167,7 +167,10 @@
  	return (event.data.call_status === TU_CALL_STATUS.outgoingCreated || event.data.call_status === TU_CALL_STATUS.outgoingRinging) && event.data.is_outgoing === true;
  }
  function isEndedCall(event) {
@@ -32,7 +51,179 @@ diff -ru a/dist/runtime-api.js b/dist/runtime-api.js
  }
  function isUnknownCallStatus(event) {
  	return !isIncomingRingingCall(event) && !isOutgoingRingingCall(event) && !isActiveCall(event) && !isEndedCall(event);
-@@ -2049,6 +2052,25 @@
+@@ -1175,6 +1178,110 @@
+ ]);
+ const FACETIME_AUDIO_SAMPLE_RATE_HZ = 24e3;
+ const OUTPUT_LATENCY_BUDGET_MS = 100;
++// Uno patch: the echo gate, with barge-in. While Uno's voice plays, and
++// ECHO_TAIL_MS after, the caller's audio is silence: the far end sent Uno's
++// own voice back, and the model took it for the caller, cut itself off and
++// answered itself. Echo can only be a weaker copy of what Uno said in the last
++// ECHO_LOOKBACK_MS, so audio well above that prediction, for long enough, is
++// the caller talking over Uno: the gate opens and the model hears them.
++const ECHO_TAIL_MS = 1000;
++const ECHO_LOOKBACK_MS = 1500;
++const ECHO_GAIN_DEFAULT_DB = -6;
++const ECHO_GAIN_SAMPLES = 200;
++const ECHO_LEARN_MS = 3000;
++const ECHO_JUMP_DB = 10;
++const BARGE_MARGIN_DB = 8;
++const BARGE_FLOOR_DBFS = -42;
++const BARGE_SUSTAIN_MS = 200;
++function pcm16Dbfs(audio) {
++	const n = Math.floor(audio.byteLength / 2);
++	if (!n) return -120;
++	let sum = 0;
++	for (let i = 0; i < n; i++) {
++		const v = audio.readInt16LE(i * 2) / 32768;
++		sum += v * v;
++	}
++	return 10 * Math.log10(sum / n + 1e-12);
++}
++function createEchoGate(params) {
++	let gateUntilMs = 0;
++	let segment;
++	let played = [];
++	let gains = [];
++	const chunkMs = (audio) => (audio.byteLength / 2 / FACETIME_AUDIO_SAMPLE_RATE_HZ) * 1000;
++	// How much weaker than Uno's voice the echo comes back on this call: the
++	// 90th percentile of what was heard while Uno talked (the last
++	// ECHO_GAIN_SAMPLES chunks, kept across turns); never below a conservative
++	// guess until there's ECHO_LEARN_MS of it, longer than any echo's delay
++	// (on a slow line the first second is silence before the echo arrives).
++	const learned = () => gains.reduce((sum, x) => sum + x.ms, 0) >= ECHO_LEARN_MS;
++	const echoGainDb = () => {
++		const sorted = gains.map((x) => x.g).sort((a, b) => a - b);
++		const p90 = sorted.length ? sorted[Math.floor(0.9 * (sorted.length - 1))] : ECHO_GAIN_DEFAULT_DB;
++		return learned() ? p90 : Math.max(p90, ECHO_GAIN_DEFAULT_DB);
++	};
++	const finish = () => {
++		if (!segment) return;
++		params.logger?.info?.(`[facetime] echo gate: Uno spoke ${((segment.lastPlayMs - segment.startMs) / 1000).toFixed(1)}s, Uno ~${segment.unoDb.toFixed(0)} dBFS, echo ${segment.echoGain.toFixed(0)} dB below, loudest heard ${segment.maxDb.toFixed(0)} dBFS, ${segment.barged ? "caller talked over" : "no talk-over"}`);
++		segment = void 0;
++	};
++	return {
++		// Uno's voice is queued seconds ahead of playback, so old entries are
++		// dropped by the clock, not by when this chunk will play.
++		noteOutput(audio, playStartMs, now = Date.now()) {
++			const db = pcm16Dbfs(audio);
++			played.push({ from: playStartMs, to: playStartMs + chunkMs(audio), db });
++			played = played.filter((x) => x.to >= now - ECHO_LOOKBACK_MS * 2);
++		},
++		process(audio, now) {
++			const playingMs = params.millisecondsUntilDrained(now);
++			if (playingMs > 0) {
++				gateUntilMs = Math.max(gateUntilMs, now + playingMs + ECHO_TAIL_MS);
++				segment ??= { startMs: now, lastPlayMs: now, loudMs: 0, barged: false, maxDb: -120, unoDb: -120, echoGain: ECHO_GAIN_DEFAULT_DB };
++				segment.lastPlayMs = now;
++			}
++			if (now >= gateUntilMs) {
++				finish();
++				return audio;
++			}
++			if (segment?.barged) return audio;
++			if (!segment) {
++				audio.fill(0);
++				return audio;
++			}
++			const db = pcm16Dbfs(audio);
++			const recent = played.filter((x) => x.to >= now - ECHO_LOOKBACK_MS && x.from <= now);
++			const unoDb = recent.length ? Math.max(...recent.map((x) => x.db)) : -120;
++			const gain = echoGainDb();
++			const ms = chunkMs(audio);
++			segment.maxDb = Math.max(segment.maxDb, db);
++			segment.unoDb = Math.max(segment.unoDb, unoDb);
++			segment.echoGain = gain;
++			// Speech dips between syllables, so loud time adds up and quiet time
++			// drains it, rather than needing one unbroken stretch.
++			// No record of what Uno just said means nothing to compare with: stay shut.
++			if (unoDb > -100 && db >= Math.max(unoDb + gain + BARGE_MARGIN_DB, BARGE_FLOOR_DBFS)) {
++				segment.loudMs += ms;
++				if (segment.loudMs >= BARGE_SUSTAIN_MS) {
++					segment.barged = true;
++					params.logger?.info?.(`[facetime] caller talking over Uno: gate open (${db.toFixed(0)} dBFS; echo predicted ${(unoDb + gain).toFixed(0)})`);
++					return audio;
++				}
++			} else {
++				segment.loudMs = Math.max(0, segment.loudMs - ms);
++				// Everything heard while Uno talks teaches the echo level at first
++				// (the greeting, while they listen); after that, a sudden jump well
++				// above it is the caller, not Uno coming back.
++				if (unoDb > -100 && (!learned() || db - unoDb <= gain + ECHO_JUMP_DB)) {
++					gains.push({ g: db - unoDb, ms });
++					if (gains.length > ECHO_GAIN_SAMPLES) gains.shift();
++				}
++			}
++			audio.fill(0);
++			return audio;
++		}
++	};
++}
+ const SOX_COREAUDIO_BUFFER_BYTES = 8192;
+ const SOX_COMMAND = [
+ 	process.env.HOME ? `${process.env.HOME}/.homebrew/bin/sox` : void 0,
+@@ -1301,6 +1408,10 @@
+ 	const spawnFn = params.spawn ?? ((command, args, options) => spawn(command, args, options));
+ 	const childEnv = sanitizedAudioChildEnv();
+ 	const playbackClock = new PlaybackClock();
++	const echoGate = createEchoGate({
++		millisecondsUntilDrained: (now) => playbackClock.millisecondsUntilDrained(now),
++		logger: params.logger
++	});
+ 	let playbackGeneration = 1;
+ 	let drainTimer;
+ 	let outputProcess;
+@@ -1463,7 +1574,8 @@
+ 	captureProcess.stdout?.on("data", (chunk) => {
+ 		if (!stopped && !mediaSuspended) {
+ 			const audio = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+-			if (audio.byteLength > 0) params.onInputAudio(audio);
++			// Uno patch: the echo gate (createEchoGate).
++			if (audio.byteLength > 0) params.onInputAudio(echoGate.process(audio, Date.now()));
+ 		}
+ 	});
+ 	return {
+@@ -1487,6 +1599,8 @@
+ 				cancelDrainTimer();
+ 				outputProcess.stdin.write(audio);
+ 				playbackClock.append(audio.byteLength / 2, metadata?.itemId);
++				// Uno patch: the echo gate predicts echo from what Uno said.
++				echoGate.noteOutput(audio, playbackClock.playbackUntilMs - (audio.byteLength / 2 / FACETIME_AUDIO_SAMPLE_RATE_HZ) * 1e3);
+ 			} catch (error) {
+ 				reportFailure(error instanceof Error ? error : new Error(formatErrorMessage(error)), false);
+ 			}
+@@ -1551,7 +1665,7 @@
+ const FACETIME_END_CALL_TOOL = {
+ 	type: "function",
+ 	name: FACETIME_END_CALL_TOOL_NAME,
+-	description: "Immediately end the current FaceTime call when the caller clearly asks to hang up, end, leave, or disconnect this call. Do not use this to cancel background work.",
++	description: "End the current FaceTime call when the caller asks you to end it, after you've said bye. When they only say they're going to hang up, say bye and let them. Do not use this to cancel background work.",
+ 	parameters: {
+ 		type: "object",
+ 		properties: {}
+@@ -1567,7 +1681,7 @@
+ function buildRealtimeInstructions(params) {
+ 	const callControlInstructions = [
+ 		"Call control:",
+-		`- When the caller asks you to hang up, end, leave, or disconnect the current FaceTime call, call ${FACETIME_END_CALL_TOOL_NAME} immediately.`,
++		`- When the caller is wrapping up or says they're going to hang up, say a quick, warm bye and let them hang up. Call ${FACETIME_END_CALL_TOOL_NAME} only when they ask you to end the call, and say bye first.`,
+ 		`- Never delegate a current-call hangup request to ${REALTIME_VOICE_AGENT_CONSULT_TOOL_NAME}, ask for confirmation, or say that you will check.`
+ 	].join("\n");
+ 	const proxyInstructions = params.toolPolicy === "none" ? void 0 : [
+@@ -1907,8 +2021,11 @@
+ 	const abortForClose = () => {
+ 		for (const consult of pending.values()) {
+ 			consult.cancelRequested = true;
++			// Uno patch: a hang-up no longer cancels Uno's work in progress. The
++			// consult runs to the end (a task it was handing to a texted job, a
++			// text it was sending); only its spoken answer is dropped.
++			consult.detached = true;
+ 			pending.delete(consult.callId);
+-			abortConsult(consult, "closed or reset");
+ 		}
+ 	};
+ 	const cancelPending = () => {
+@@ -2032,6 +2149,25 @@
  			await submitToolError(event, `Tool "${event.name}" not available`);
  			return;
  		}
@@ -58,7 +249,7 @@ diff -ru a/dist/runtime-api.js b/dist/runtime-api.js
  		cancelPending();
  		const turnId = params.ensureTurn();
  		const consult = {
-@@ -2058,7 +2080,8 @@
+@@ -2041,7 +2177,8 @@
  			cancelRequested: false,
  			terminalSubmitted: false,
  			generation: params.getGeneration(),
@@ -68,7 +259,16 @@ diff -ru a/dist/runtime-api.js b/dist/runtime-api.js
  		};
  		pending.set(callId, consult);
  		params.remember({
-@@ -2174,7 +2197,7 @@
+@@ -2135,7 +2272,7 @@
+ 					controller: new AbortController()
+ 				};
+ 				consult.runRegistration = registration;
+-				if (consult.cancelRequested || pending.get(consult.callId) !== consult) registration.controller.abort(/* @__PURE__ */ new Error("FaceTime agent consult was already cancelled"));
++				if (!consult.detached && (consult.cancelRequested || pending.get(consult.callId) !== consult)) registration.controller.abort(/* @__PURE__ */ new Error("FaceTime agent consult was already cancelled"));
+ 				return {
+ 					abortSignal: registration.controller.signal,
+ 					cleanup: () => {
+@@ -2157,7 +2294,7 @@
  }
  //#endregion
  //#region extensions/facetime/src/talk-initial-greeting.ts
@@ -77,9 +277,47 @@ diff -ru a/dist/runtime-api.js b/dist/runtime-api.js
  const FACETIME_GREETING_MEDIA_SETTLE_MS = 100;
  function createFaceTimeInitialGreeting(params) {
  	let timer;
+@@ -2775,7 +2912,37 @@
+ 		call.audioTransport = void 0;
+ 		params.calls.close(call);
+ 		params.logger.info(`[facetime] call closed (${reason})`);
++		if (call.carrierMode === "closed") await releaseLeftoverCaptures();
+ 	};
++	// Uno patch: no leftover audio capture. When a call's end can't be confirmed,
++	// its capture keeps running on purpose (fail-closed); when the gateway then
++	// restarts, the capture is orphaned for good, since nothing is left to tell it
++	// the call is over, and each one burns ~15% of a core. Once a call here ends
++	// with FaceTime's carrier confirmed closed, captures an earlier gateway left
++	// behind (parent gone, now launchd's) are stopped.
++	const releaseLeftoverCaptures = async () => {
++		const run = async (argv) => await params.runtime.system.runCommandWithTimeout(argv, { timeoutMs: 2e3 });
++		const listLeftovers = async () => {
++			const listed = await run(["/bin/ps", "-axo", "pid=,ppid=,comm="]);
++			if (listed.code !== 0) return [];
++			return listed.stdout.split("\n").map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/u)).filter((m) => m && m[2] === "1" && (m[3] === params.captureBinary || m[3].endsWith("/facetime-audio-capture"))).map((m) => m[1]);
++		};
++		try {
++			const found = await listLeftovers();
++			if (!found.length) return;
++			let left = found;
++			for (const signal of ["-TERM", "-KILL"]) {
++				await run(["/bin/kill", signal, ...left]);
++				await new Promise((resolve) => setTimeout(resolve, 500).unref?.());
++				const still = new Set(await listLeftovers());
++				left = left.filter((pid) => still.has(pid));
++				if (!left.length) break;
++			}
++			params.logger.info(`[facetime] stopped ${found.length - left.length} leftover audio capture process(es) from an earlier gateway${left.length ? `; ${left.length} still running (${left.join(", ")})` : ""}`);
++		} catch (error) {
++			params.logger.warn(`[facetime] leftover audio capture check failed: ${formatErrorMessage(error)}`);
++		}
++	};
+ 	const attemptCarrierHangup = async (call, reason, options = {}) => {
+ 		const closeLocal = options.closeLocal !== false;
+ 		const scheduleRetry = options.scheduleRetry !== false;
 diff -ru a/scripts/install-driver-root.sh b/scripts/install-driver-root.sh
---- a/scripts/install-driver-root.sh	2026-10-01 13:15:18
-+++ b/scripts/install-driver-root.sh	2026-10-01 13:15:18
+--- a/scripts/install-driver-root.sh	1985-10-26 04:15:00
++++ b/scripts/install-driver-root.sh	2026-10-02 19:24:56
 @@ -116,6 +116,7 @@
      -configuration Release \
      -derivedDataPath "$work_dir/DerivedData" \
@@ -89,8 +327,8 @@ diff -ru a/scripts/install-driver-root.sh b/scripts/install-driver-root.sh
      PRODUCT_BUNDLE_IDENTIFIER="$bundle_id" \
      CC="$clang" \
 diff -ru a/scripts/install-driver.applescript b/scripts/install-driver.applescript
---- a/scripts/install-driver.applescript	2026-10-01 13:15:18
-+++ b/scripts/install-driver.applescript	2026-10-01 13:15:18
+--- a/scripts/install-driver.applescript	1985-10-26 04:15:00
++++ b/scripts/install-driver.applescript	2026-10-02 19:24:56
 @@ -5,7 +5,7 @@
  	set sourceTransaction to item 3 of argv
  	set installMode to item 4 of argv

@@ -2,6 +2,32 @@
   "name": "uno-family-memory",
   "version": "0.1.0",
   "private": true,
+  "description": "Shared family memory, shared skills and the USER.md save tool.",
+  "license": "MIT",
   "type": "module",
-  "openclaw": { "extensions": ["./index.js"] }
+  "os": [
+    "darwin"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.9.6"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.9.6"
+    },
+    "install": {
+      "minHostVersion": ">=2026.9.6"
+    },
+    "build": {
+      "openclawVersion": "2026.9.7"
+    }
+  }
 }

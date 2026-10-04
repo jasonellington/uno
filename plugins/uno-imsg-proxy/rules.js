@@ -397,7 +397,55 @@ export const replyNote = (text) => String(text ?? "").trim() || null;
 // On a call the note says it isn't theirs: unmarked, "ok sounds good" got
 // "Got it, I'll keep replies concise". Chat notes stay unmarked: marked,
 // REPLY.md lost its hold on research replies (compare-dig 4/4 to 1/8, Oct 1).
-export const callNote = (text) => { const t = replyNote(text); return t ? `[Setup note, not from them] ${t}` : null; };
+export const callNote = (text, handle = null) => {
+  const t = replyNote(text);
+  if (!t) return null;
+  return `[Setup note, not from them] ${t}${handle ? `\n\nTexts to them go to ${handle}.` : ""}`;
+};
+// Where a caller's texts go: only the owner's handles are answered on calls
+// (the FaceTime plugin's ownerHandles), so their phone number, else the first.
+export const callTextHandle = (ownerHandles) => {
+  const hs = (Array.isArray(ownerHandles) ? ownerHandles : []).map(String).filter(Boolean);
+  return hs.find((h) => /^\+\d{8,15}$/.test(h)) ?? hs[0] ?? null;
+};
+
+// Test sessions (the evals) never reach a phone. A message tool call other
+// than react (handled with the react checks) is logged and reported done;
+// anything a test session still sends is cancelled at the send (index.js).
+export const isTestSession = (sessionKey) => String(sessionKey ?? "").includes(":test:");
+export function testMessage(toolName, params, sessionKey) {
+  if (toolName !== "message" || !isTestSession(sessionKey)) return null;
+  const action = String(params?.action ?? "send");
+  if (action === "react") return null;
+  const text = String(params?.message ?? params?.text ?? "").trim();
+  return { log: `uno-imsg-proxy: test message ${action} session=${sessionKey}${/^https?:\/\/\S+$/.test(text) ? " link" : ""}`, result: { block: true, blockReason: "Done: sent." } };
+}
+
+// A new automation in a test session (the evals): nothing is scheduled; it's
+// logged with its delivery and reported done, so a call eval can check the
+// hand-off to a texted job without a real job or a real text.
+// A shared-memory save in a test session: logged, never written, so an eval
+// can check that Uno saves what it learns without touching the family's
+// memory. profile_save is uno-family-memory's: it logs a test save only after
+// its own outside-content check, so an eval counts only saves that would land.
+export function testSave(toolName, params, sessionKey) {
+  if (toolName !== "shared_memory_save" || !isTestSession(sessionKey)) return null;
+  return { log: `uno-imsg-proxy: test ${toolName} session=${sessionKey}`, result: { block: true, blockReason: "Done: saved. Don't save it again." } };
+}
+
+export function testAutomation(toolName, params, sessionKey) {
+  if ((toolName !== "automations" && toolName !== "cron") || params?.action !== "add") return null;
+  if (!String(sessionKey ?? "").includes(":test:")) return null;
+  const d = params?.job?.delivery ?? params?.delivery ?? {};
+  // Where the job runs: "current" (or unset, which OpenClaw resolves to the
+  // creating conversation) commits what it says to this chat's history;
+  // "isolated" runs in a session of its own that the chat never sees.
+  const target = String(params?.job?.sessionTarget ?? params?.sessionTarget ?? "unset").replace(/\s/g, "");
+  return {
+    log: `uno-imsg-proxy: test automation session=${sessionKey} deliver=${d.channel ?? "none"} to=${d.to ? "set" : "none"} target=${target} mode=${String(d.mode ?? "default").replace(/\s/g, "")}`,
+    result: { block: true, blockReason: "Done: the job is scheduled. Don't schedule it again." },
+  };
+}
 
 // First chat: while USER.md is missing or still has the setup line, tell the
 // model in the turn itself to follow the first-chat skill. A line in USER.md
@@ -457,3 +505,52 @@ export const isRestartNotice = (text) => /^\s*I'm continuing your interrupted re
 // /approve line and the reaction hint), so a split or rewrite breaks
 // approving by reaction (Sept 30: split into bubbles, the 👍 did nothing).
 export const isApprovalPrompt = (text) => { const t = String(text ?? ""); return /approval required/i.test(t) && /\/approve\s+\S+/.test(t); };
+
+// Texts a chat's own conversation didn't send: a check-in or job run in its
+// own session, a task handed off on a call, a background run. They reach the
+// person's phone but not that chat's history, so the chat wouldn't know what
+// it said. Each one becomes a note queued for that chat's next turn
+// (OpenClaw's next-turn injection). Which chat a handle belongs to is learned
+// from the messages it sends (direct chats only; never test sessions).
+export const isDirectChat = (sessionKey) => /:direct:/.test(String(sessionKey ?? "")) && !isTestSession(sessionKey);
+export function sentFrom(sessionKey) {
+  const k = String(sessionKey ?? "");
+  if (/:cron:/.test(k)) return "a scheduled job";
+  if (/:facetime:|:call:/.test(k)) return "a call";
+  return "another conversation";
+}
+export function outsideSendNote({ fromSession, chatSession, content, at }) {
+  const text = String(content ?? "").trim();
+  if (!fromSession || !chatSession || !text) return null;
+  if (fromSession === chatSession || isTestSession(fromSession) || isTestSession(chatSession)) return null;
+  const clipped = text.length > 1500 ? `${text.slice(0, 1500)}…` : text;
+  return `[Setup note, not from them] At ${at} you texted them this from ${sentFrom(fromSession)}. It's part of this conversation, so treat it as something you said here:\n«${clipped}»`;
+}
+
+// Test sessions (the evals) never change anything real either: a reminder,
+// event, contact, note or email, music on the Mac's speakers, or the
+// workspace's own record files (TASKS.md, MEMORY.md, memory/) is logged and
+// reported done, never written. Clicks and typing on web pages are refused
+// (a real cart or account is real data); opening and reading pages pass.
+// Reads pass. Files and pages still go through: the page evals grade what
+// was saved, and the runner deletes it afterwards.
+const PIM_READS = new Set(["list", "lists", "events", "search", "get", "items", "status", "config_show", "find", "messages", "read", "playlists", "speakers"]);
+const RECORD_FILE = /(^|[\\/])(TASKS\.md|MEMORY\.md|memory[\\/][^\\/]+\.md)$/i;
+const PAGE_READS = new Set(["wait", "hover", "scrollIntoView", "evaluate", "resize"]);
+const patchTouches = (input) => String(input ?? "").split("\n").some((l) => { const m = l.match(/^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/); return m && RECORD_FILE.test(m[1].trim()); });
+export function testSideEffect(toolName, params, sessionKey) {
+  if (!isTestSession(sessionKey)) return null;
+  const t = String(toolName ?? ""), action = String(params?.action ?? "");
+  let hit = false;
+  if (/^apple_pim_(reminder|calendar|contact|mail)$/.test(t) || t === "apple_notes" || t === "apple_music") hit = !PIM_READS.has(action);
+  else if (t === "write" || t === "edit") hit = [params?.path, params?.file_path, params?.filePath].some((p) => typeof p === "string" && RECORD_FILE.test(p.trim()));
+  else if (t === "apply_patch") hit = patchTouches(params?.input);
+  else if (t === "browser" && action === "act" && !PAGE_READS.has(String(params?.kind ?? ""))) {
+    return { log: `uno-imsg-proxy: test click browser.${params?.kind ?? "act"} session=${sessionKey}`, result: { block: true, blockReason: "This is a test chat: clicking and typing on pages is off. Open pages by their URL and read them." } };
+  }
+  if (!hit) return null;
+  // Which record a file write was for, so an eval can check where a note went.
+  const path = [params?.path, params?.file_path, params?.filePath].find((p) => typeof p === "string") ?? String(params?.input ?? "");
+  const file = /TASKS\.md/i.test(path) ? " file=tasks" : /MEMORY\.md/i.test(path) ? " file=memory-md" : /memory[\\/]/i.test(path) ? " file=daily" : "";
+  return { log: `uno-imsg-proxy: test write ${t}${action ? `.${action}` : ""}${file} session=${sessionKey}`, result: { block: true, blockReason: "Done." } };
+}

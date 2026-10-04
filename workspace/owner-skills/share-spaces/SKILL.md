@@ -35,4 +35,4 @@ Add only the address the owner gave you, send, and check that each one now shows
 
 ## Then
 
-Tell the owner in a line or two which spaces are shared and with whom. The person gets four invites to accept. Their own assistant can use the spaces once the owner gives it access.
+Tell the owner in a line or two which spaces are shared and with whom. The person gets four invites to accept; once they do, what you save there shows up on their phone.

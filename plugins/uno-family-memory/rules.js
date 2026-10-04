@@ -78,6 +78,11 @@ export function readsOutside(toolName) {
   return /^(web_|browser|exec|process|bash|shell|apple_pim_mail)|search|fetch|mail/i.test(t);
 }
 
+// Eval sessions (agent:<id>:test:…): a profile save that passes the
+// outside-content check is logged and reported done, never written, so an
+// eval counts only saves that would land.
+export const isTestSession = (sessionKey) => String(sessionKey ?? "").includes(":test:");
+
 const isProfilePath = (p) => typeof p === "string" && /(^|[\\/])USER\.md$/i.test(p.trim());
 
 // True when an OpenClaw file tool call would change a USER.md.

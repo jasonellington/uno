@@ -28,7 +28,7 @@ Settings (`plugins.entries.uno-family-memory.config`):
 | `dir` | `~/.openclaw/uno-data/family-memory` | The shared store. Keep it outside every agent workspace, and list the same absolute path in each agent's `memory.search.extraPaths` |
 | `skillsDir` | `~/.openclaw/uno-data/shared-skills` | Shared skills. List the same absolute path in `skills.load.extraDirs` so every agent loads it |
 | `sharedSites` | uno-guard's `sharedSites` | Sites a shared skill may name |
-| `names` | none | Agent id → the person's first name, stamped on each shared note so everyone sees whose chat it came from (the add-person skill sets it) |
+| `names` | none | Agent id → the person's first name, stamped on each shared note so everyone sees whose chat it came from |
 
 ## Who gets it
 

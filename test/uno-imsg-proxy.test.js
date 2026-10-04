@@ -443,55 +443,6 @@ test("family sign-in: only a bare host name reaches the admin's agent; shared si
   assert.match(signInReply("FAILED", { site: "example.com" }), /don't try to sign in yourself/);
 });
 
-test("websites: large changes and deploys ask the owner; the coder starts only after change_check; only the quality agent browses, on its own profile", async () => {
-  const { siteRole, changeCheck, siteSpawnDecision, deployDecision, siteBrowserDecision, siteNote } = await import("../plugins/uno-guard/rules.js");
-  const sites = { "agent-site": { person: "Pat", coder: "agent-coder", qa: "agent-qa" } };
-  const chat = siteRole("agent-site", sites), coder = siteRole("agent-coder", sites), qa = siteRole("agent-qa", sites);
-  assert.deepEqual([chat.role, coder.role, qa.role], ["chat", "coder", "qa"]);
-  assert.equal(siteRole("agent-other", sites), null);
-  assert.equal(changeCheck({ summary: "Fix a typo on the About page", size: "small" }).allow, true);
-  assert.ok(changeCheck({ summary: "Add online booking", size: "large" }).ask);
-  assert.ok(changeCheck({ summary: "Something", size: "medium" }).ask); // unclear size asks
-  assert.ok(changeCheck({ size: "small" }).block);
-  assert.ok(siteSpawnDecision({ agentId: "agent-coder" }, chat, false).block);
-  assert.equal(siteSpawnDecision({ agentId: "agent-coder", task: "x" }, chat, true).params.completionTarget, "parent");
-  assert.equal(siteSpawnDecision({ agentId: "agent-qa", completionTarget: "requester" }, chat, false).params.completionTarget, "parent");
-  assert.match(siteSpawnDecision({ agentId: "main" }, chat, true).blockReason, /"agent-coder".*"agent-qa"/);
-  assert.ok(siteSpawnDecision({ agentId: "agent-qa" }, coder, true).block);
-  assert.ok(deployDecision({ pr: 12, summary: "typo" }, chat).ask);
-  assert.equal(deployDecision({ pr: 12 }, siteRole("agent-site", { "agent-site": { ...sites["agent-site"], deploys: "auto" } })).allow, true);
-  assert.ok(deployDecision({ pr: "x" }, chat).block);
-  assert.ok(deployDecision({ pr: 12 }, qa).block);
-  assert.ok(siteBrowserDecision("browser", { action: "open" }, chat).block);
-  assert.ok(siteBrowserDecision("browser", { action: "open" }, coder).block);
-  assert.deepEqual(siteBrowserDecision("browser", { action: "open", url: "https://example.com", profile: "family" }, qa).params, { action: "open", url: "https://example.com", profile: "sites", target: "host" });
-  assert.ok(siteBrowserDecision("browser", { action: "open", node: "x" }, qa).block);
-  assert.match(siteNote({ ownerName: "Sam", site: sites["agent-site"] }), /Sam, Pat and you, for Pat's website[\s\S]*agentId "agent-coder"[\s\S]*GitHub isn't connected yet/);
-});
-
-test("websites: the coder can't merge, push to main or deploy from its shell", async () => {
-  const { coderShellDecision, siteRole } = await import("../plugins/uno-guard/rules.js");
-  const sites = { "agent-site": { coder: "agent-coder", qa: "agent-qa" } };
-  const coder = siteRole("agent-coder", sites);
-  for (const c of ["gh pr merge 12 --squash", "git push origin main", "git push origin HEAD:main", "git push -f origin master", "npx vercel --prod", "vercel promote https://x.vercel.app", "gh api repos/o/r/pulls/3/merge -X PUT"])
-    assert.ok(coderShellDecision("exec", { command: c }, coder)?.block, c);
-  for (const c of ["git push -u origin uno/fix-typo", "gh pr create --fill", "npm run build", "git checkout main && git pull"])
-    assert.equal(coderShellDecision("exec", { command: c }, coder), null, c);
-  assert.equal(coderShellDecision("exec", { command: "gh pr merge 1" }, siteRole("agent-site", sites)), null);
-});
-
-test("websites: the chat agent carries its workers' tools but can't use them itself", async () => {
-  const { siteToolDecision, siteRole } = await import("../plugins/uno-guard/rules.js");
-  const sites = { "agent-site": { coder: "agent-coder", qa: "agent-qa" } };
-  const [chat, coder, qa] = ["agent-site", "agent-coder", "agent-qa"].map((a) => siteRole(a, sites));
-  for (const t of ["exec", "write", "edit", "apply_patch", "process", "browser"]) assert.ok(siteToolDecision(t, {}, chat)?.block, t);
-  for (const t of ["message", "sessions_spawn", "read", "web_search"]) assert.equal(siteToolDecision(t, {}, chat), null, t);
-  assert.equal(siteToolDecision("exec", { command: "npm run build" }, coder), null);
-  assert.ok(siteToolDecision("browser", { action: "open" }, coder).block);
-  assert.equal(siteToolDecision("browser", { action: "open" }, qa).params.profile, "sites");
-  assert.equal(siteToolDecision("exec", {}, null), null);
-});
-
 test("group chats: an opening household name is dropped", async () => {
   const { dropOpeningName } = await import("../plugins/uno-imsg-proxy/rules.js");
   const names = ["Sam", "Alex"];
@@ -551,11 +502,10 @@ test("approvals by iMessage: OpenClaw's prompt is parsed and replaced by one pla
   const p = parseApprovalPrompt(prompt);
   assert.deepEqual(p, { id: "plugin:15d233a6-1f94-456f-a6d7-9b37d016eba3", title: "Buy something ($99.00)", description: "Buy a test item on example.com for $99.00?", plugin: "uno-guard", agent: "agent-group" });
   assert.equal(parseApprovalPrompt("Hello"), null);
-  const opts = { adminAgentId: "main", names: { "agent-a": "Alex" }, sites: { "agent-site": { person: "Pat" } }, groupAgents: ["agent-group"] };
+  const opts = { adminAgentId: "main", names: { "agent-a": "Alex" }, groupAgents: ["agent-group"] };
   assert.equal(approvalFrom("main", opts), "");
   assert.equal(approvalFrom("agent-group", opts), "Group chat");
   assert.equal(approvalFrom("agent-a", opts), "Alex's chat");
-  assert.equal(approvalFrom("agent-site", opts), "Pat's website chat");
   assert.equal(cleanApprovalPrompt(p, "Group chat"), "Group chat: buy a test item on example.com for $99.00?\n👍 or 👎");
   assert.equal(cleanApprovalPrompt(p, ""), "Buy a test item on example.com for $99.00?\n👍 or 👎");
   assert.equal(isApprovalFollowUp("✅ Plugin approval denied. Resolved by iMessage approval (+15555550100). ID: plugin:x"), true);
@@ -601,4 +551,131 @@ test("threading: every bubble follows the first one's thread", async () => {
   assert.deepEqual(bubbleArgs(chat, "more words", null), ["send", "--chat-guid", chat, "--text", "more words"]);
   assert.deepEqual(bubbleArgs(chat, "https://example.com/a", null), ["send-rich", "--chat", chat, "--url", "https://example.com/a"]);
   assert.equal(appleTime(978307200000), 0);
+});
+
+test("test sessions: a new automation is logged with its delivery and reported done, never scheduled", async () => {
+  const { testAutomation } = await import("../plugins/uno-imsg-proxy/rules.js");
+  const job = { action: "add", job: { delivery: { mode: "announce", channel: "imessage", to: "+15555550100" } } };
+  const t = testAutomation("automations", job, "agent:main:test:call:eval-x-1");
+  assert.match(t.log, /test automation session=agent:main:test:call:eval-x-1 deliver=imessage to=set target=\S+ mode=\S+$/);
+  assert.equal(t.result.block, true);
+  assert.match(t.result.blockReason, /^Done: the job is scheduled/);
+  assert.match(testAutomation("cron", { action: "add", job: {} }, "agent:main:test:eval-y").log, /deliver=none to=none target=unset mode=default$/);
+  assert.match(testAutomation("automations", { action: "add", job: { sessionTarget: "current", delivery: { mode: "announce" } } }, "agent:main:test:eval-y").log, /target=current mode=announce$/);
+  assert.equal(testAutomation("automations", job, "agent:main:imessage:direct:me"), null); // real chats schedule for real
+  assert.equal(testAutomation("automations", { ...job, action: "list" }, "agent:main:test:call:eval-x-1"), null);
+  assert.equal(testAutomation("message", job, "agent:main:test:call:eval-x-1"), null);
+});
+
+test("test sessions never text: message sends are logged and reported done; reacts keep their own path", async () => {
+  const { testMessage, isTestSession } = await import("../plugins/uno-imsg-proxy/rules.js");
+  const key = "agent:main:test:call:eval-x-1";
+  const t = testMessage("message", { action: "send", message: "hi", target: "+15555550100" }, key);
+  assert.match(t.log, /test message send session=agent:main:test:call:eval-x-1$/);
+  assert.deepEqual(t.result, { block: true, blockReason: "Done: sent." });
+  assert.match(testMessage("message", { message: "hi" }, key).log, /test message send session=\S+$/); // no action: a send
+  assert.match(testMessage("message", { action: "send", message: "https://www.amazon.com/dp/B000" }, key).log, / link$/);
+  assert.equal(testMessage("message", { action: "react", emoji: "👍" }, key), null);
+  assert.equal(testMessage("message", { action: "send" }, "agent:main:imessage:direct:me"), null);
+  assert.equal(isTestSession("agent:uno-lab:test:eval-y"), true);
+  assert.equal(isTestSession("agent:main:facetime:abc"), false);
+});
+
+test("call note: where their texts go, from the owner's FaceTime handles (phone first)", async () => {
+  const { callNote, callTextHandle } = await import("../plugins/uno-imsg-proxy/rules.js");
+  assert.equal(callTextHandle(["owner@example.com", "+15555550100"]), "+15555550100");
+  assert.equal(callTextHandle(["owner@example.com"]), "owner@example.com");
+  assert.equal(callTextHandle(undefined), null);
+  assert.equal(callNote("Say it out loud.", "+15555550100"), "[Setup note, not from them] Say it out loud.\n\nTexts to them go to +15555550100.");
+  assert.equal(callNote("Say it out loud."), "[Setup note, not from them] Say it out loud.");
+  assert.equal(callNote("  ", "+15555550100"), null);
+});
+
+test("test sessions: shared-memory saves are logged, never written; profile_save is left to uno-family-memory", async () => {
+  const { testSave } = await import("../plugins/uno-imsg-proxy/rules.js");
+  const t = testSave("shared_memory_save", {}, "agent:uno-lab:test:eval-a-1");
+  assert.match(t.log, /test shared_memory_save session=agent:uno-lab:test:eval-a-1$/);
+  assert.equal(t.result.block, true);
+  assert.equal(testSave("profile_save", { content: "x" }, "agent:main:test:eval-b"), null);
+  assert.equal(testSave("shared_memory_save", {}, "agent:main:imessage:direct:me"), null);
+  assert.equal(testSave("write", {}, "agent:main:test:eval-b"), null);
+});
+
+test("builder: only the admin's agent, on the owner's own message, with the owner's 👍 on the task", async () => {
+  const { builderSpawnDecision, builderTask } = await import("../plugins/uno-guard/rules.js");
+  const admin = { agentId: "main", adminAgentId: "main", fromOwner: true, builderBinary: "agentcli" };
+  const run = (command, who = admin, tool = "exec") => builderSpawnDecision(tool, { command }, who);
+  const start = `~/.openclaw/uno-data/watchdog/builder.sh wrong-link "Fix the wrong link; run the evals before and after."`;
+  assert.deepEqual(builderTask(start), { name: "wrong-link", task: "Fix the wrong link; run the evals before and after." });
+  assert.match(run(start).ask.description, /wrong link; run the evals/);
+  assert.match(run(start, admin, "process").ask.title, /builder/);
+  assert.match(run(start, { ...admin, agentId: "uno-agent-sam" }).block, /owner's own chat/);
+  assert.match(run(start, { ...admin, fromOwner: false }).block, /owner's own message/);
+  assert.match(run("~/.openclaw/uno-data/watchdog/builder.sh wrong-link").block, /whole task/);
+  assert.match(run("agentcli -p 'do it'").block, /builder script/); // the agent's own command, any other way
+  assert.match(run("/Users/x/.local/bin/agentcli -p hi").block, /builder script/);
+  assert.equal(run("ls -la; echo agentclient"), null);
+  assert.equal(run("npm test"), null);
+  assert.equal(run("ls -l ~/.openclaw/uno-data/builder/x.out ~/.openclaw/uno-data/watchdog/builder.sh; tail -n 12 ~/.openclaw/uno-data/builder/x.out"), null); // looking isn't starting
+  assert.equal(run("~/.openclaw/uno-data/watchdog/builder.sh done wrong-link"), null); // cleanup needs no 👍
+  assert.match(run(`cd ~ && ~/.openclaw/uno-data/watchdog/builder.sh wrong-link "Fix it."`).ask.description, /Fix it/);
+  // An ACP spawn of a coding agent takes the same path.
+  const acp = builderSpawnDecision("sessions_spawn", { runtime: "acp", task: "Fix it." }, admin);
+  assert.match(acp.ask.description, /Fix it/);
+  assert.equal(builderSpawnDecision("sessions_spawn", { task: "x" }, admin), null); // a native sub-agent isn't the builder
+});
+
+test("a text sent from outside a chat's own conversation becomes a note for that chat", async () => {
+  const { outsideSendNote, isDirectChat, sentFrom } = await import("../plugins/uno-imsg-proxy/rules.js");
+  const chat = "agent:main:imessage:direct:me";
+  assert.ok(isDirectChat(chat));
+  assert.ok(!isDirectChat("agent:main:test:eval-a-1:direct:x"));
+  assert.ok(!isDirectChat("agent:uno-agent-family:imessage:group:2"));
+  const cron = outsideSendNote({ fromSession: "agent:main:cron:abc:run:def", chatSession: chat, content: "I'd pick the clover killer.", at: "Oct 2, 4:36 PM" });
+  assert.match(cron, /^\[Setup note, not from them\] At Oct 2, 4:36 PM you texted them this from a scheduled job/);
+  assert.match(cron, /«I'd pick the clover killer\.»$/);
+  assert.equal(sentFrom("agent:main:facetime:333d"), "a call");
+  assert.equal(outsideSendNote({ fromSession: chat, chatSession: chat, content: "hi", at: "now" }), null); // its own reply
+  assert.equal(outsideSendNote({ fromSession: undefined, chatSession: chat, content: "hi", at: "now" }), null); // unknown sender: can't tell
+  assert.equal(outsideSendNote({ fromSession: "agent:main:test:eval-x-1", chatSession: chat, content: "hi", at: "now" }), null);
+  assert.equal(outsideSendNote({ fromSession: "agent:main:cron:a", chatSession: undefined, content: "hi", at: "now" }), null);
+  assert.ok(outsideSendNote({ fromSession: "agent:main:cron:a", chatSession: chat, content: "x".repeat(2000), at: "now" }).endsWith("…»"));
+});
+
+test("scheduling outside the owner's chat: the group chat only, one-time, back to itself", async () => {
+  const { chatJobDecision } = await import("../plugins/uno-guard/rules.js");
+  const who = { agentId: "uno-agent-family", adminAgentId: "main", schedulingAgents: ["uno-agent-family"] };
+  const add = (job) => chatJobDecision("automations", { action: "add", job }, who);
+  const once = { schedule: { kind: "at", at: "2026-10-04T18:00:00-04:00" }, payload: { kind: "agentTurn", message: "Reply with exactly this: water the lawn" } };
+  const ok = add(once);
+  assert.equal(ok.params.job.sessionTarget, "current");
+  assert.equal(ok.params.job.deleteAfterRun, true);
+  assert.equal(add({ ...once, sessionTarget: "current", delivery: { mode: "announce" } }).params.job.sessionTarget, "current");
+  assert.match(add({ ...once, schedule: { kind: "cron", expr: "0 9 * * *" } }).blockReason, /nothing recurring/);
+  assert.match(add({ ...once, sessionTarget: "isolated" }).blockReason, /this conversation/);
+  assert.match(add({ ...once, delivery: { channel: "imessage", to: "+15555550100" } }).blockReason, /report back to this chat/);
+  assert.match(add({ ...once, payload: { kind: "command", argv: ["ls"] } }).blockReason, /no commands/);
+  assert.equal(chatJobDecision("automations", { action: "list" }, who), null);
+  assert.match(chatJobDecision("automations", { action: "update" }, who).blockReason, /nothing else/);
+  assert.match(chatJobDecision("automations", { action: "add", job: once }, { ...who, agentId: "uno-agent-juliet" }).blockReason, /isn't available/);
+  assert.equal(chatJobDecision("automations", { action: "add", job: { schedule: { kind: "cron" } } }, { ...who, agentId: "main" }), null); // the owner's chat is unchanged
+});
+
+test("test sessions change nothing real: reminders, events, notes, music and the record files", async () => {
+  const { testSideEffect } = await import("../plugins/uno-imsg-proxy/rules.js");
+  const k = "agent:uno-agent-family:test:eval-a-1";
+  assert.match(testSideEffect("apple_pim_reminder", { action: "create", title: "Water the lawn" }, k).log, /test write apple_pim_reminder\.create session=/);
+  assert.equal(testSideEffect("apple_pim_reminder", { action: "create" }, k).result.blockReason, "Done.");
+  assert.ok(testSideEffect("apple_pim_calendar", { action: "create" }, k));
+  assert.ok(testSideEffect("apple_notes", { action: "append" }, k));
+  assert.ok(testSideEffect("apple_music", { action: "play_song" }, k));
+  assert.ok(testSideEffect("write", { path: "/Users/x/.openclaw/workspace/TASKS.md" }, k));
+  assert.match(testSideEffect("edit", { path: "memory/2026-10-03.md" }, k).log, / file=daily session=/);
+  assert.match(testSideEffect("write", { path: "/Users/x/.openclaw/workspace/MEMORY.md" }, k).log, / file=memory-md session=/);
+  assert.ok(testSideEffect("apply_patch", { input: "*** Begin Patch\n*** Update File: MEMORY.md\n@@\n" }, k));
+  for (const [t, p] of [["apple_pim_reminder", { action: "lists" }], ["apple_pim_calendar", { action: "events" }], ["apple_notes", { action: "read" }], ["apple_files", { action: "save" }], ["write", { path: "/tmp/page.html" }], ["read", { path: "TASKS.md" }]]) assert.equal(testSideEffect(t, p, k), null, t);
+  assert.match(testSideEffect("browser", { action: "act", kind: "click", ref: "e12" }, k).result.blockReason, /by their URL/); // a real cart is real data
+  for (const p of [{ action: "navigate", targetUrl: "https://www.amazon.com/gp/buyagain" }, { action: "snapshot" }, { action: "act", kind: "evaluate" }]) assert.equal(testSideEffect("browser", p, k), null, p.action);
+  assert.equal(testSideEffect("browser", { action: "act", kind: "click" }, "agent:main:imessage:direct:me"), null);
+  assert.equal(testSideEffect("apple_pim_reminder", { action: "create" }, "agent:main:imessage:direct:me"), null); // real chats act for real
 });

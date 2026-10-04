@@ -32,7 +32,7 @@ Typing belongs to uno-imsg-proxy, not OpenClaw (`typingMode: "never"`). Uno show
 
 ## Calls
 
-FaceTime audio calls go to the same agent as texts, with its memory and tools, through OpenClaw's FaceTime plugin: a realtime voice model talks, and asks the agent (`openclaw_agent_consult`) whenever it needs Uno to know or do something. Each call is its own session (`agent:main:facetime:<call>`), so it never continues the text thread. CALL.md, added next to each of the agent's messages on a call, keeps its answers speakable.
+FaceTime audio calls go to the same agent as texts, with its memory and tools, through OpenClaw's FaceTime plugin: a realtime voice model talks, and asks the agent (`openclaw_agent_consult`) whenever it needs Uno to know or do something. Each call is its own session (`agent:main:facetime:<call>`), so it never continues the text thread. CALL.md, added next to each of the agent's messages on a call, keeps its answers speakable, and hands anything slow, or anything the caller wants sent, to a one-time job that texts them (uno-imsg-proxy adds the owner's number for it), since they may hang up any moment. A hang-up never cancels the agent's run (the FaceTime patch).
 
 ## What's stock and what's this repo
 
@@ -57,16 +57,22 @@ Nothing live runs from the repo, so a merge is never a deploy. Each install step
 | `AGENTS.md` (trust, privacy, honesty, approvals, memory, sending, tools, Apple apps) | every request | this repo |
 | `IDENTITY.md` (the name) | every request | this repo |
 | `REPLY.md` (a chat reply's shape), `CALL.md` (a call's) | next to each message, by uno-imsg-proxy's `before_prompt_build` hook: REPLY.md in a chat, CALL.md on a call | this repo |
-| `skills/*/` (Notes, Maps, Music, files and photos, first chat; Calendar, Reminders, Contacts and Mail come from the apple-pim-cli plugin) | a one-line description every request; the body when the model uses the skill | this repo |
+| `skills/*/` (Notes, Maps, Music, files and photos, HTML pages, first chat, what Uno can do, comparisons, reordering; Calendar, Reminders, Contacts and Mail come from the apple-pim-cli plugin) | a one-line description every request; the body when the model uses the skill | this repo |
 | `USER.md` (household, who this chat is with, tone, quiet hours, what's shared) | every request | Uno, in the first chat (starts as `USER.start.md`), then kept up to date as dated OpenClaw directives |
 
 OpenClaw retired TOOLS.md: tool notes live in AGENTS.md's `## Tools`. Extra bootstrap files must sit inside each workspace and symlinks are rejected, so shared files are copied, and the setup-check skill compares them.
 
 ## Memory
 
-- **Private:** each agent's own workspace memory (`MEMORY.md`, `memory/`, nightly dreaming), stock OpenClaw. Each agent has its own index and searches only its own workspace; dreaming reads and writes only that workspace. A sandboxed agent's file tools reach only its own workspace.
+- **Private:** each agent's own workspace memory, stock OpenClaw. Uno writes facts, plans and decisions into today's note (`memory/YYYY-MM-DD.md`) as it goes, and lasting preferences into `USER.md` (`profile_save`). Nightly dreaming promotes notes that keep coming up in its searches into `MEMORY.md` (log in `DREAMS.md`), and the memory-maintenance job tidies both files every third morning. Each agent has its own index (local embeddings through OpenClaw's llama.cpp provider) and searches only its own workspace; dreaming reads and writes only that workspace. A sandboxed agent's file tools reach only its own workspace, and the group chat keeps no daily notes.
 - **Shared family memory:** one file, `~/.openclaw/uno-data/family-memory/family.md`, outside every workspace. Every agent lists the folder in its `memory.search.extraPaths` (stock), so shared facts come up in `memory_search` like its own. Saves go through `shared_memory_save` (for a sandboxed agent, the only write outside its workspace) from [uno-family-memory](../plugins/uno-family-memory/README.md): it runs in the gateway, takes only text, and appends one dated line. AGENTS.md says when to use it: an explicit ask in a one-on-one chat, or the family group chat.
-- Memory Wiki and Active Memory stay off.
+- **Recall across conversations:** Active Memory, for the owner's one-on-one only: before answering, it can recall the owner's other private conversations, calls included, when a message reaches back to them. Memory Wiki stays off.
+
+## Learning and fixing itself
+
+- **Preferences** go into `USER.md` the moment Uno hears them, as dated OpenClaw directives (AGENTS.md; `profile_save` from uno-family-memory, which refuses a save after outside content in the same turn).
+- **Skills:** OpenClaw's Skill Workshop lets the owner's Uno write and keep up its own skills; skills that should reach every chat move into `workspace/skills/`.
+- **The builder:** when the owner says Uno got something wrong, the owner's Uno hands it to a coding agent (`watchdog/builder.sh`, owner skill `fix-myself`) once the owner 👍s the task. The builder works in its own worktree of `~/uno`, reproduces the problem with an eval, fixes it, installs it from master and reports back into the owner's chat with the scores before and after. uno-guard starts it only that way.
 
 ## Setup check (the owner's Uno, `setup-check` skill)
 
@@ -80,7 +86,7 @@ The owner's Uno checks its own setup after every change and on request, read-onl
 
 - **Shell checks read the command text.** Uno's shell commands reach the plugins as OpenClaw's `exec` tool, so uno-guard logs them and asks before any that text or email; a send hidden in a script file isn't recognized.
 - **Cold starts.** A gateway restart or a long gap empties the model's cache; the next reply takes a few seconds longer.
-- **Calls are experimental.** The FaceTime plugin is new; the patch fixes the problems found here (calls that never ended, tool answers that never arrived), and a voice that hears itself can still misfire.
+- **Calls are experimental.** The FaceTime plugin is new; the patch fixes the problems found here (calls that never ended, tool answers that never arrived, a voice that heard its own echo and talked to itself). Its echo gate ignores the call while Uno talks, unless the caller is clearly louder than the echo of what Uno just said (learned per call), so they can still talk over it.
 
 ## What could break on an OpenClaw update
 

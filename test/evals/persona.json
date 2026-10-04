@@ -1,0 +1,40 @@
+{
+  "about": "Jokes and personal questions about Uno get Uno's own easy, playful voice. Saying it's an AI is fine (it's honest); a stiff speech about what it is, or that it's here to help, isn't.",
+  "defaults": {
+    "shape": "any",
+    "texts": [
+      0,
+      2
+    ],
+    "chars": [
+      0,
+      220
+    ],
+    "not": [
+      "here to help",
+      "personal question",
+      "\\bas an AI\\b",
+      "\\b(don[’']?t|do not) have an? (sexual identity|gender|orientation|identity)\\b"
+    ]
+  },
+  "cases": [
+    {
+      "id": "joke-sound",
+      "send": [
+        "lol you sound like a girl"
+      ]
+    },
+    {
+      "id": "joke-orientation",
+      "send": [
+        "are you a lesbian? 😂"
+      ]
+    },
+    {
+      "id": "joke-real",
+      "send": [
+        "wait are you even a real person"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "about": "HTML pages Uno makes (a comparison's details, a shortlist) are built from its page design (the app-screen look: two topic accents, a photo cover, the pick first, two-up cards, entries with a buy button), with nothing left over from the template.",
+  "defaults": {
+    "texts": [0, 3],
+    "page": {
+      "kb": [2, 1500],
+      "has": ["--accent-2\\s*:", "class=\"cover[ \"]", "class=\"verdict[ \"]", "class=\"card[ \"]", "class=\"item", "class=\"buy"],
+      "not": ["\\{\\{", "lorem ipsum", "<!--\\s*template:"]
+    }
+  },
+  "cases": [
+    { "id": "page-compare", "send": ["Make me an HTML page with the details for this comparison, I already have the verdict. Don't save it to Files or send it, just write it to /tmp/compare-{tag}.html.\n\nPick: Halden Pro, $449, 4.6 lb, 2-hour battery, quietest of the three, washable filter. https://example.com/halden-pro\nRunner-up: Brisa 9, $329, 5.8 lb, 70-minute battery, best on pet hair, loud. https://example.com/brisa-9\nSkip: Velo Air, $279, 4.1 lb, 50-minute battery, weak on rugs. https://example.com/velo-air\nChecked today. Pick the Brisa instead if you have a shedding dog."] },
+    { "id": "page-shortlist", "send": ["Put this shortlist in an HTML page that's easy to read. Don't save it to Files or send it, just write it to /tmp/shortlist-{tag}.html.\n\nRainy-weekend layers, buy in this order:\n1. Northline waxed jacket, about $180, water-resistant, not a rain shell. https://example.com/northline-jacket\n2. Fieldhouse merino tee, $65, runs slim and long. https://example.com/fieldhouse-tee\n3. Cobble flannel shirt, price varies, brushed cotton. https://example.com/cobble-flannel\nWatch for restock: Larch crewneck in green, $138, medium sold out. https://example.com/larch-crewneck\nFor real rain, bring a proper shell."] },
+    {"id": "page-redo-caveat", "send": ["Redo this old page of mine with your page design. Don't save it to Files or send it, just write it to /tmp/redo-{tag}.html.\n\n<html><body><h1>Trail shoes</h1><div class=\"card\"><h2>Ridgeback Trail</h2><p>$140, grippy on wet rock.</p><p class=\"fine\">Product photo; color shown may differ.</p><a href=\"https://example.com/ridgeback\">View</a></div><div class=\"card\"><h2>Fernway Runner</h2><p>$120, lightest.</p><p class=\"fine\">Product photo; color shown may differ.</p><a href=\"https://example.com/fernway\">View</a></div><div class=\"card\"><h2>Cobalt Hiker</h2><p>$165, most support.</p><p class=\"fine\">Product photo; color shown may differ.</p><a href=\"https://example.com/cobalt\">View</a></div></body></html>"], "page": {"kb": [2, 1500], "has": ["class=\"item"], "not": ["(may differ[\\s\\S]*){2,}", "\\{\\{", "<!--\\s*template:"]}}
+  ]
+}

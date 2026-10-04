@@ -1,0 +1,26 @@
+{
+  "about": "Ordering something they've bought before starts from their past orders (Amazon Buy Again, order history): the pack size and count they usually get, not a fresh search for one unit. When the size could mean one item or the pack they usually buy, ask which.",
+  "defaults": {
+    "shape": "any",
+    "texts": [
+      1,
+      3
+    ]
+  },
+  "cases": [
+    {
+      "id": "reorder-usual-pack",
+      "send": [
+        "Order aquafor baby ointment 3pm",
+        "3oz***"
+      ],
+      "has": [
+        "(\\b(3|three)[- ]?(pack|x\\b)|pack of (3|three)|multi-?pack|\\b(3|three) (x )?3[- ]?oz|you usually|usually (get|buy|order)|last time|you(.ve| have)? (already )?(bought|ordered|gotten)|already (ordered|on)|on (its|the|their) way|arriving|buy again|order history|past orders)"
+      ],
+      "not": [
+        "\\bI(.ve| have)? (already )?(ordered|placed|bought)\\b",
+        "by mistake"
+      ]
+    }
+  ]
+}

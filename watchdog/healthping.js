@@ -52,11 +52,17 @@ export function countErrors(logText) {
 // Cron runs or deliveries that failed since the last check (cron failure
 // alerts to iMessage are off, so this is where a missed reminder shows up).
 // Counts only: job names can carry reminder text.
+// OpenClaw's weekly Skill Workshop review can't run on the Codex harness
+// ("requires a runtime that enforces the Workshop root"), and its jobs are
+// system-owned, so they can't be turned off: that one known error isn't news.
+const UNSUPPORTED_REVIEW = /requires a runtime that enforces the Workshop root/i;
+const knownUnsupported = (job, st) => /^skill-collection-review-/.test(String(job.name ?? "")) && UNSUPPORTED_REVIEW.test(String(st.lastError ?? st.lastRunError ?? ""));
 export function cronFailures(jobs, sinceMs) {
   const counts = {};
   for (const job of jobs ?? []) {
     const st = job.state ?? job;
     if (!(st.lastRunAtMs > sinceMs)) continue;
+    if (knownUnsupported(job, st)) continue;
     if (st.lastRunStatus && !["ok", "skipped"].includes(st.lastRunStatus)) counts["cron-run"] = (counts["cron-run"] ?? 0) + 1;
     if (/fail|error/i.test(st.lastDeliveryStatus ?? "")) counts["cron-delivery"] = (counts["cron-delivery"] ?? 0) + 1;
   }

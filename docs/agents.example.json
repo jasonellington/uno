@@ -1,128 +1,5 @@
 [
   {
-    "path": "agents.entries.uno-agent-sam.memory",
-    "value": {
-      "search": {
-        "extraPaths": [
-          "/Users/uno/.openclaw/uno-data/family-memory"
-        ]
-      }
-    }
-  },
-  {
-    "path": "agents.entries.uno-agent-sam.identity",
-    "value": {
-      "name": "Uno",
-      "avatar": "avatars/uno.jpg"
-    }
-  },
-  {
-    "path": "agents.entries.uno-agent-sam.sandbox",
-    "value": {
-      "mode": "all",
-      "workspaceAccess": "rw",
-      "scope": "agent",
-      "browser": {
-        "allowHostControl": true
-      }
-    }
-  },
-  {
-    "path": "agents.entries.uno-agent-sam.tools",
-    "value": {
-      "deny": [
-        "gateway",
-        "openclaw",
-        "plugins",
-        "secrets",
-        "nodes",
-        "canvas",
-        "computer",
-        "onepassword",
-        "apple_pim_contact",
-        "apple_pim_system",
-        "sessions_list",
-        "sessions_history",
-        "sessions_search",
-        "sessions_send",
-        "sessions_spawn",
-        "subagents",
-        "transcripts",
-        "skill_workshop",
-        "cron",
-        "automations",
-        "apple_notes",
-        "apple_files"
-      ],
-      "elevated": {
-        "enabled": false
-      },
-      "message": {
-        "crossContext": {
-          "allowWithinProvider": false,
-          "allowAcrossProviders": false
-        }
-      },
-      "sandbox": {
-        "tools": {
-          "allow": [
-            "exec",
-            "process",
-            "read",
-            "write",
-            "edit",
-            "apply_patch",
-            "session_status",
-            "web_search",
-            "web_fetch",
-            "message",
-            "memory_search",
-            "memory_get",
-            "image_generate",
-            "view_image",
-            "pdf",
-            "tts",
-            "apple_pim_reminder",
-            "browser",
-            "shared_memory_save",
-            "apple_maps",
-            "apple_music",
-            "profile_save",
-            "apple_pim_mail",
-            "shared_skill_save",
-            "apple_pim_calendar",
-            "purchase_check",
-            "family_sign_in"
-          ],
-          "deny": [
-            "gateway",
-            "openclaw",
-            "plugins",
-            "secrets",
-            "nodes",
-            "canvas",
-            "computer",
-            "onepassword",
-            "apple_pim_contact",
-            "apple_pim_system",
-            "sessions_list",
-            "sessions_history",
-            "sessions_search",
-            "sessions_send",
-            "sessions_spawn",
-            "subagents",
-            "transcripts",
-            "skill_workshop",
-            "cron",
-            "automations",
-            "apple_notes",
-            "apple_files"
-          ]
-        }
-      }
-    }
-  },
-  {
     "path": "agents.entries.uno-agent-family.memory",
     "value": {
       "search": {
@@ -173,8 +50,6 @@
         "apple_pim_mail",
         "apple_pim_contact",
         "apple_pim_system",
-        "cron",
-        "automations",
         "apple_notes",
         "apple_files"
       ],
@@ -214,7 +89,9 @@
             "apple_music",
             "shared_skill_save",
             "purchase_check",
-            "family_sign_in"
+            "family_sign_in",
+            "automations",
+            "cron"
           ],
           "deny": [
             "gateway",
@@ -236,8 +113,6 @@
             "apple_pim_mail",
             "apple_pim_contact",
             "apple_pim_system",
-            "cron",
-            "automations",
             "apple_notes",
             "apple_files"
           ]

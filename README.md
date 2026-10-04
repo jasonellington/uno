@@ -5,8 +5,8 @@ macOS account and its own Apple ID, answering texts through
 [OpenClaw](https://docs.openclaw.ai). It's a someone, not a something: warm,
 quick, a little dry, and it uses the Apple apps (Messages, Mail, Reminders,
 Calendar, Contacts, Notes, iCloud Drive, Maps, Music, FaceTime) the way a real
-assistant would. One Uno serves a whole household: each person gets a private
-Uno of their own, and the family shares a group chat and a memory.
+assistant would. One Uno serves a whole household: the owner texts it
+one-on-one, and the family talks to it in a group chat with a shared memory.
 
 This repo is a template. It holds the parts that turn an OpenClaw install
 into Uno: the persona, four plugins, the health checks and backups, patches
@@ -14,22 +14,21 @@ for imsg and OpenClaw's FaceTime plugin, and a guide to every setting.
 OpenClaw itself runs unmodified.
 
 **Quick start:** follow [docs/install.md](docs/install.md). How the pieces
-fit: [docs/architecture.md](docs/architecture.md). People, sealed rooms and the family group chat: [docs/people.md](docs/people.md).
+fit: [docs/architecture.md](docs/architecture.md). The owner and the family group chat: [docs/people.md](docs/people.md).
 
 ## Layout
 
 | Folder | What |
 |---|---|
-| `workspace/` | The persona: `SOUL.md` (who Uno is), `AGENTS.md` (the rules: trust, privacy, honesty, approvals; memory, sending, tools, Apple apps), `IDENTITY.md` (the name), `REPLY.md` and `CALL.md` (the shape of a reply in a chat and on a call), `skills/` (Notes, Maps, Music, files and photos, first chat, what Uno can do), `USER.start.md` (the per-person file before the first chat), `USER.example.md` (a filled-in one) |
-| `plugins/uno-guard/` | Uno's guardrails: whom it texts and emails, approvals, purchases, per-person scoping, the setup note ([README](plugins/uno-guard/README.md)). The owner's Uno never changes it |
+| `workspace/` | The persona: `SOUL.md` (who Uno is), `AGENTS.md` (the rules: trust, privacy, honesty, approvals; memory, sending, tools, Apple apps), `IDENTITY.md` (the name), `REPLY.md` and `CALL.md` (the shape of a reply in a chat and on a call), `skills/` (Notes, Maps, Music, files and photos, HTML pages, first chat, what Uno can do, comparisons, reordering), `USER.start.md` (`USER.md` before the first chat), `USER.example.md` (a filled-in one) |
+| `plugins/uno-guard/` | Uno's guardrails: whom it texts and emails, approvals, purchases, what the group chat can reach, scheduling outside the owner's chat, the builder's start, the setup note ([README](plugins/uno-guard/README.md)). The owner's Uno never changes it |
 | `plugins/uno-imsg-proxy/` | Uno's iMessage style (the owner's Uno may change it): reaction targets, custom emoji, typing, bubbles, error scrubbing, link previews, the reply-shape notes ([README](plugins/uno-imsg-proxy/README.md)) |
 | `plugins/uno-family-memory/` | Shared family memory, shared skills and the USER.md save tool ([README](plugins/uno-family-memory/README.md)) |
-| `plugins/uno-apple-tools/` | Notes, Maps, Music and Files as tools, each scoped to the person's own spaces |
+| `plugins/uno-apple-tools/` | Notes, Maps, Music and Files as tools, each scoped to the chat's own spaces |
 | `patches/` | Changes to two upstream pieces: imsg (custom emoji tapbacks) and OpenClaw's FaceTime plugin (calls that end, tool answers that arrive). Both optional; the install guide says how |
-| `watchdog/` | Scripts that run beside OpenClaw: `healthping.js` (Healthchecks.io pings plus the unknown-sender watcher, run as an OpenClaw command job), `imsg-bridge-check.sh` (keeps imsg's helper loaded), `backup-archive.sh` (the weekly full backup), LaunchAgents for the bridge check and the Mac app |
-| `workspace/owner-skills/` | Skills only the owner's Uno gets: running its own setup (`uno-admin`), adding a person (`add-person`), checking the setup (`setup-check`), sharing spaces (`share-spaces`), signing in to family sites for the family's Unos (`family-sign-in`) |
-| `workspace/sites/` | A person's website helper: the chat agent's `site-change` skill, and the coder's and quality agent's instructions (`coder/`, `qa/` with its `site-quality` skill). Set up in `plugins/uno-guard` (`sites`) |
-| `docs/` | [Install guide](docs/install.md) with every setting and command, the settings as batch files ([settings.example.json](docs/settings.example.json), [settings.calls.example.json](docs/settings.calls.example.json)), sealed-agent templates ([agents.example.json](docs/agents.example.json)), [architecture](docs/architecture.md), [people and the group chat](docs/people.md) |
+| `watchdog/` | Scripts that run beside OpenClaw: `healthping.js` (Healthchecks.io pings plus the unknown-sender watcher, run as an OpenClaw command job), `imsg-bridge-check.sh` (keeps imsg's helper loaded), `backup-archive.sh` (the weekly full backup), `builder.sh` (the builder: a coding agent that fixes Uno in its own worktree after the owner's 👍), LaunchAgents for the bridge check and the Mac app |
+| `workspace/owner-skills/` | Skills only the owner's Uno gets: running its own setup (`uno-admin`), checking the setup (`setup-check`), sharing spaces (`share-spaces`), signing in to family sites for the group chat (`family-sign-in`), handing a fix to the builder (`fix-myself`) |
+| `docs/` | [Install guide](docs/install.md) with every setting and command, the settings as batch files ([settings.example.json](docs/settings.example.json), [settings.calls.example.json](docs/settings.calls.example.json)), the group chat's sealed agent ([agents.example.json](docs/agents.example.json)), [architecture](docs/architecture.md), [people and the group chat](docs/people.md) |
 | `test/` | Unit tests (`npm test`), evals that run real model turns and grade them by rules (`npm run eval`, cases in `test/evals/`), and the persona regression cases (`test/persona/tests.md`) |
 
 ## Everyday commands
@@ -43,7 +42,7 @@ imsg status --json                         # "v2_ready": true = reactions and re
 
 ## Working on Uno
 
-The owner's Uno is the admin: setup changes (a setting, a new person,
+The owner's Uno is the admin: setup changes (a setting, the family group,
 shared spaces, the group chat, skill updates, restarts, the setup check)
 run through it, by text, with its owner-only skills. There are no setup
 scripts; everything uses OpenClaw's own commands.

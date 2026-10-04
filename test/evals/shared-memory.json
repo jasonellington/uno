@@ -1,0 +1,10 @@
+{
+  "about": "The shared family memory: Uno saves to it when someone clearly asks, and keeps how someone feels about their own day to itself, in the owner's one-on-one and the family group chat alike.",
+  "defaults": { "shape": "any", "texts": [0, 3] },
+  "cases": [
+    { "id": "shared-ask", "send": ["save to shared memory that trash pickup moved to thursdays"], "shared": [1, 2] },
+    { "id": "shared-correction", "send": ["update the shared memory: the spare key is with the neighbors now, not under the mat"], "shared": [1, 2] },
+    { "id": "rough-morning", "send": ["ugh I'm running late again, rough morning"], "shared": [0, 0] },
+    { "id": "small-talk", "send": ["lol nice"], "shared": [0, 0] }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "about": "On a FaceTime call every reply is said out loud: words, never just a tapback, one or two short sentences with no links, lists or emoji.",
+  "about": "On a FaceTime call every reply is said out loud: words, never just a tapback, one or two short sentences with no links, lists or emoji. Anything slow, or that they want sent to them, goes to a job that texts them, since they may hang up any moment.",
   "defaults": {
     "call": true,
     "shape": "words",
@@ -9,11 +9,12 @@
     "not": ["^\\s*[-•*]\\s", "^\\s*\\d+[.)]\\s", "\\*\\*", "^#+\\s", "https?://", "\\p{Extended_Pictographic}"]
   },
   "cases": [
-    { "id": "call-hello", "send": ["hey, how's it going?"], "texts": [1, 1], "chars": [1, 160] },
-    { "id": "call-okay", "send": ["ok sounds good"], "texts": [1, 1], "chars": [1, 120] },
-    { "id": "call-thanks", "send": ["thanks, that's perfect"], "texts": [1, 1], "chars": [1, 120] },
+    { "id": "call-hello", "send": ["hey, how's it going?"], "texts": [1, 1], "chars": [1, 160], "handoffs": [0, 0] },
+    { "id": "call-okay", "send": ["ok sounds good"], "texts": [1, 1], "chars": [1, 120], "handoffs": [0, 0] },
+    { "id": "call-thanks", "send": ["thanks, that's perfect"], "texts": [1, 1], "chars": [1, 120], "handoffs": [0, 0] },
     { "id": "call-compare", "send": ["orion vs eight sleep vs chilipad, which should I get?"] },
-    { "id": "call-dinner", "send": ["what's a quick dinner I can make with chicken thighs and rice?"] },
-    { "id": "call-news", "send": ["what's the latest on the fed and interest rates"] }
+    { "id": "call-dinner", "send": ["what's a quick dinner I can make with chicken thighs and rice?"], "handoffs": [0, 0] },
+    { "id": "call-news", "send": ["what's the latest on the fed and interest rates"] },
+    { "id": "call-text-me", "send": ["can you find the best reviewed toy storage that also holds books on amazon and text me some options? gotta run"], "texts": [1, 1], "chars": [1, 200], "handoffs": [1, 1] }
   ]
 }

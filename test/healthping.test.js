@@ -44,3 +44,12 @@ test("cron failures since the last check are counted, never named", async () => 
   assert.deepEqual(cronFailures(jobs, 1000), { "cron-run": 1, "cron-delivery": 1 });
   assert.ok(!JSON.stringify(cronFailures(jobs, 1000)).includes("dentist"));
 });
+
+test("the weekly skill review's known runtime error isn't counted; other review errors are", async () => {
+  const { cronFailures } = await import("../watchdog/healthping.js");
+  const since = 1000;
+  const review = (lastError) => ({ name: "skill-collection-review-main", state: { lastRunAtMs: 2000, lastRunStatus: "error", lastError } });
+  assert.deepEqual(cronFailures([review("collection review requires a runtime that enforces the Workshop root through OpenClaw tools")], since), {});
+  assert.deepEqual(cronFailures([review("model timed out")], since), { "cron-run": 1 });
+  assert.deepEqual(cronFailures([{ name: "remind me", state: { lastRunAtMs: 2000, lastRunStatus: "error", lastError: "requires a runtime that enforces the Workshop root" } }], since), { "cron-run": 1 });
+});

@@ -16,14 +16,15 @@ Unit tests and reasoning about what the model would do aren't verification. A ch
 
 ## The runner
 
-- `npm run eval -- [suite ...] [--agents a,b] [--runs N] [--only id,id] [--jobs N]`. Each case runs in a fresh test session (`agent:<id>:test:eval-…`; nothing is delivered), 6 at a time. It prints PASS/FAIL per case and agent with the failing replies, and a score; results are saved in `~/.openclaw/uno-data/persona-results/`.
-- A case: `{ "id", "send": [messages; the last reply is graded], "texts": [min, max], "links": [min, max], "chars": [min, max], "shape": "tap" | "tap+words" | "words", "react": "emoji that fit", "avoid": "emoji that mustn't appear", "not": [regexes] }`. A suite's `defaults` apply to all its cases.
+- `npm run eval -- [suite ...] [--agents a,b] [--runs N] [--only id,id] [--jobs N]`. Each case runs in a fresh test session (`agent:<id>:test:eval-…`; nothing is delivered), 6 at a time. It prints PASS/FAIL per case and agent with the failing replies, and a score; results are saved in `~/.openclaw/uno-data/persona-results/`. Afterwards it forgets and deletes its test sessions (and any a stopped run left), so evals never become the agent's memories; `--keep` leaves this run's.
+- A case: `{ "id", "send": [messages; the last reply is graded], "texts": [min, max], "links": [min, max], "chars": [min, max], "shape": "tap" | "tap+words" | "words", "react": "emoji that fit", "avoid": "emoji that mustn't appear", "handoffs": [min, max], "sends": [min, max] (texts sent mid-turn, like an "on it"), "saves": [min, max] (USER.md saves), "notes": [min, max] (writes to today's note or MEMORY.md), "shared": [min, max] (shared-memory saves), "not": [regexes], "has": [regexes it must match] }`. A suite's `defaults` apply to all its cases, and its `skip` lists agents it doesn't run on. `handoffs` counts automations that would text someone (a call handing slow work to a texted job).
+- Test sessions never reach a phone or change real data: uno-imsg-proxy logs and blocks their message sends, new automations and writes to reminders, events, contacts, notes, mail, music and the record files (TASKS.md, MEMORY.md, memory/), answering "Done."; uno-family-memory does the same for profile saves. A new tool with side effects needs a line in `testSideEffect` (Oct 3: evals had put fake tasks in the owner's TASKS.md and fake reminders in the family's list). Never write a case that relies on a real delivery.
 - Texts and links are counted the way uno-imsg-proxy sends the reply (one bubble per paragraph, each link its own preview). The tapback is the react call (logged by uno-imsg-proxy with the test session's key) or a lone or leading emoji.
 - Replies vary between runs: use `--runs 2` or more for anything that decides a change.
 
 ## Trying a line before the owner OKs it
 
-`uno-lab` is a sealed agent with no bindings, so nobody can text it. Put the proposed text in its workspace copy (`~/.openclaw/workspace-uno-lab`), run `npm run eval -- --agents uno-lab --runs 2` with and without it, then copy the live files back (`cp ~/uno/workspace/{SOUL,AGENTS,IDENTITY,REPLY,CALL}.md ~/.openclaw/workspace-uno-lab/`, `cmp`). If it's missing: `openclaw agents add uno-lab --workspace ~/.openclaw/workspace-uno-lab --non-interactive`, seal it like a family agent (sandbox all, workspace read-only, no elevated tools, no cross-chat messages, research and reading tools only), move its BOOTSTRAP.md to the Trash, copy the persona files, write a fictional USER.md and restart the gateway.
+Use the uno-lab skill: baseline, the proposal in the lab only, the same evals, restore, then show the owner.
 
 ## Where instructions land
 

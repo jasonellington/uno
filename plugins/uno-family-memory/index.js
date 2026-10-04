@@ -9,7 +9,7 @@
 import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FILE_NAME, PROFILE_FILE, localDate, planProfile, planSave, planSharedSkill, readsOutside, skillSlug, sourceOf, touchesProfile } from "./rules.js";
+import { FILE_NAME, PROFILE_FILE, localDate, planProfile, planSave, planSharedSkill, isTestSession, readsOutside, skillSlug, sourceOf, touchesProfile } from "./rules.js";
 
 const expandHome = (p) => (typeof p === "string" && p.startsWith("~/") ? join(homedir(), p.slice(2)) : p);
 
@@ -23,7 +23,7 @@ const PARAMETERS = {
 };
 
 const DESCRIPTION =
-  "Save one fact to the shared family memory, which every family member's assistant can recall. " +
+  "Save one fact to the shared family memory, which you can recall in every chat, one-on-one or the family group. " +
   "Use it only when someone in a one-on-one chat clearly asks to save something to shared memory, or in the family group chat. " +
   "Only household and family matters or public knowledge, never someone's private details. Adds one line; nothing is overwritten.";
 
@@ -40,7 +40,7 @@ const SKILL_PARAMETERS = {
 };
 
 const SKILL_DESCRIPTION =
-  "Share a skill with every family member's assistant, or update a shared one. Only skills for shared sites (the logins everyone uses, like the family's shopping account) can be shared; " +
+  "Share a skill so you have it in every chat, the family group's too, or update a shared one. Only skills for shared sites (the logins everyone uses, like the family's shopping account) can be shared; " +
   "a skill for anything that's only one person's stays theirs. Use it when someone asks to make a skill shared, or when a skill you just worked out is for a shared site. " +
   "Keep the steps general: no one's order numbers, addresses or personal details.";
 
@@ -57,7 +57,9 @@ const PROFILE_PARAMETERS = {
 
 const PROFILE_DESCRIPTION =
   "Save this person's USER.md (their profile: preferences, what's shared with you, quiet hours). " +
-  "Give the whole file with your change made. This is the only way to change USER.md; the file tools can't.";
+  "Give the whole file with your change made. This is the only way to change USER.md; the file tools can't. " +
+  "When their message tells you something lasting about them (taste, sizes, budget, what they liked or didn't), even in passing inside a request, save it first, " +
+  "before any web search, page or command in this turn: once a turn reads outside content, USER.md can't change until their next message.";
 
 // Replace USER.md in place: a temp file in the same folder, then a rename.
 // A USER.md that is a symlink is refused, so the write lands in the workspace.
@@ -240,8 +242,12 @@ export default {
         if (event.toolName === "profile_save") {
           const at = key ? outside.get(key) : undefined;
           if (!key || (at && Date.now() - at < TAINT_MS)) {
-            log.info?.(`uno-family-memory: USER.md save refused after outside content (agent ${ctx?.agentId ?? "?"})`);
+            log.info?.(isTestSession(ctx?.sessionKey) ? `uno-family-memory: test profile_save refused session=${ctx.sessionKey}` : `uno-family-memory: USER.md save refused after outside content (agent ${ctx?.agentId ?? "?"})`);
             return { block: true, blockReason: "This turn read outside content (a web page, an email or a command), so USER.md can't change now. If they confirm it in their next message, save it then." };
+          }
+          if (isTestSession(ctx?.sessionKey)) {
+            log.info?.(`uno-family-memory: test profile_save session=${ctx.sessionKey}`);
+            return { block: true, blockReason: "Done: saved. Don't save it again." };
           }
           return;
         }

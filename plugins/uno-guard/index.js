@@ -5,8 +5,9 @@
 // - email and invites outside the family: the owner's 👍, or a no.
 // - purchases: the model declares them with purchase_check; the owner's
 //   limit and 👍 decide.
-// - per-person scoping: mail, Apple lists (filter lock), photo uploads, the
-//   family browser profile and shared sites.
+// - per-agent scoping: mail, Apple lists (filter lock), photo uploads, the
+//   family browser profile and shared sites; scheduling outside the owner's
+//   chat; the builder's start.
 // - the silent fallback agent, the audit log, the shell log, and the
 //   household setup note built from these settings.
 // Its hooks run before uno-imsg-proxy's (priority GUARD), so a block here
@@ -15,8 +16,8 @@ import { DatabaseSync } from "node:sqlite";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { execFile, execFileSync } from "node:child_process";
-import { approvalFor, approvalOrBlock, gate, householdHandles, signInSite, signInTask, signInOutcome, signInReply, APPROVAL_WAIT_MS, parseApprovalPrompt, isApprovalFollowUp, approvalFrom, cleanApprovalPrompt, decisionOfTapback, siteRole, changeCheck, CHANGE_GO, siteSpawnDecision, deployDecision, siteToolDecision, siteNote, coderShellDecision, textDecision, sendDecision, shellSendDecision, householdNote, unlockedSpaces, shellEntry, browserDecision, pimDecision, adminBrowserProfile, siteOf, purchaseCheck, PURCHASES_OFF, PURCHASE_GO, agentOfSession, uploadDecision, mailDecision, mailFilter } from "./rules.js";
+import { execFileSync } from "node:child_process";
+import { builderSpawnDecision, chatJobDecision, approvalFor, approvalOrBlock, gate, householdHandles, signInSite, signInTask, signInOutcome, signInReply, APPROVAL_WAIT_MS, parseApprovalPrompt, isApprovalFollowUp, approvalFrom, cleanApprovalPrompt, decisionOfTapback, textDecision, sendDecision, shellSendDecision, householdNote, unlockedSpaces, shellEntry, browserDecision, pimDecision, adminBrowserProfile, siteOf, purchaseCheck, PURCHASES_OFF, PURCHASE_GO, agentOfSession, uploadDecision, mailDecision, mailFilter } from "./rules.js";
 
 const CHAT_DB = join(homedir(), "Library/Messages/chat.db");
 const PIM_ROOT = join(homedir(), ".openclaw/uno-data/pim");
@@ -42,7 +43,6 @@ export function settings(config = {}) {
     approvalAgents: Array.isArray(config.approvalAgents) ? config.approvalAgents.map(String) : [],
     familySpaces: obj(config.familySpaces),
     spaces: obj(config.spaces),
-    sites: obj(config.sites),
     logDir: text(config.logDir) ?? join(homedir(), ".openclaw/uno-data"),
   };
 }
@@ -50,10 +50,10 @@ export function settings(config = {}) {
 export default {
   id: "uno-guard",
   name: "Uno guard",
-  description: "Uno's guardrails: whom it texts and emails, approvals, purchases, and per-person scoping.",
+  description: "Uno's guardrails: whom it texts and emails, approvals, purchases, and per-agent scoping.",
   register(api) {
     const log = api.logger ?? console;
-    const { adminAgentId, fallbackAgentId, ownerName, testSink, mailAddresses, sharedSites, purchases, purchaseLimit, purchaseFreeSites, approvalAgents, familySpaces, spaces, sites, logDir } = settings(api.pluginConfig ?? {});
+    const { adminAgentId, fallbackAgentId, ownerName, testSink, mailAddresses, sharedSites, purchases, purchaseLimit, purchaseFreeSites, approvalAgents, familySpaces, spaces, logDir } = settings(api.pluginConfig ?? {});
     const household = () => householdHandles(api.config?.channels?.imessage, api.config?.accessGroups);
     // Other agents' approvals reach the owner only when approvals.plugin
     // forwards them to explicit targets (the owner's chat); otherwise they'd
@@ -142,54 +142,6 @@ export default {
       }), { name: "family_sign_in" });
     } catch (err) { log.warn?.(`uno-guard: family_sign_in not registered: ${err?.message ?? err}`); }
 
-    // Websites (rules.js siteRole): change_check sizes a change (a large one
-    // waits for the owner's 👍 in the hook below) and, once through, lets this
-    // chat start its coder for 2 hours; site_deploy merges a pull request on
-    // GitHub with the site's token, which the model never sees.
-    const CLEARED_FILE = join(tmpdir(), "uno-site-cleared.json");
-    const readCleared = () => { try { return JSON.parse(readFileSync(CLEARED_FILE, "utf8")).filter((e) => Date.now() - e.t < 7_200_000); } catch { return []; } };
-    const clear = (key) => { try { writeFileSync(CLEARED_FILE, JSON.stringify([...readCleared(), { key, t: Date.now() }]), { mode: 0o600 }); } catch {} };
-    const cleared = (key) => readCleared().some((e) => e.key === key);
-    const text = (t, details) => ({ content: [{ type: "text", text: t }], details });
-    try {
-      api.registerTool?.((ctx) => ({
-        name: "change_check",
-        label: "Check a website change",
-        description: "Call once a website change is clear, before starting the coder. Say what it is and whether it's small (wording, photos, prices shown on a page, a small style fix) or large (a new page or feature, checkout or payments, a redesign, anything risky or long). A large one waits for the owner's OK. Start the coder only if it says go.",
-        parameters: { type: "object", additionalProperties: false, required: ["summary", "size", "timeoutMs"], properties: { ...WAIT,
-          summary: { type: "string", description: "The change, in a sentence or two" },
-          size: { type: "string", enum: ["small", "large"] },
-        } },
-        async execute() {
-          if (siteRole(ctx?.agentId, sites)?.role !== "chat") return text("Not available.", { go: false });
-          clear(ctx?.sessionKey ?? "none");
-          return text(CHANGE_GO, { go: true });
-        },
-      }), { name: "change_check" });
-      api.registerTool?.((ctx) => ({
-        name: "site_deploy",
-        label: "Deploy the website",
-        description: "Call after the quality agent passed a change's preview: merges its pull request, which deploys the site. It asks the owner first.",
-        parameters: { type: "object", additionalProperties: false, required: ["pr", "summary", "timeoutMs"], properties: { ...WAIT,
-          pr: { type: "integer", description: "The pull request number" },
-          summary: { type: "string", description: "The change, in a sentence" },
-        } },
-        async execute(_id, params) {
-          const role = siteRole(ctx?.agentId, sites);
-          if (role?.role !== "chat") return text("Not available.", { ok: false });
-          const { repo, tokenFile } = role.site;
-          if (!repo || !tokenFile) return text("GitHub isn't connected yet, so it can't deploy. Tell them the change waits on that.", { ok: false });
-          let token;
-          try { token = readFileSync(tokenFile, "utf8").trim(); } catch { return text("The GitHub token is missing. Tell them it can't deploy right now.", { ok: false }); }
-          const ok = await new Promise((resolve) => execFile("gh", ["pr", "merge", String(Number(params?.pr)), "--repo", repo, "--squash", "--delete-branch"],
-            { env: { ...process.env, GH_TOKEN: token }, timeout: 60_000 }, (err) => resolve(!err)));
-          log.info?.(`uno-guard: site deploy PR #${Number(params?.pr)} ${ok ? "merged" : "failed"} for ${ctx?.agentId}`);
-          return ok ? text("Merged; the site is deploying. Check the live site, then tell them it's done.", { ok: true })
-            : text("The merge didn't go through. Tell them in a line; don't retry on your own.", { ok: false });
-        },
-      }), { name: "site_deploy" });
-    } catch (err) { log.warn?.(`uno-guard: website tools not registered: ${err?.message ?? err}`); }
-
     // Senders with no binding of their own land on the fallback agent: its
     // turns end in silence before the model runs, and nothing it would send
     // (an error line included) goes out.
@@ -213,6 +165,29 @@ export default {
           .filter((k) => p[k] != null).map((k) => `${k}=${JSON.stringify(p[k]).slice(0, 120)}`).join(" ");
         log.info?.(`uno-guard: audit ${ctx.agentId} ${event.toolName}${p.action ? `.${p.action}` : ""} ${where}`.trim());
       } catch {}
+    }, GUARD);
+
+    // The builder (rules.js builderSpawnDecision): the admin's agent, the
+    // owner's own message, and the owner's 👍 on the task.
+    const builderBinary = api.pluginConfig?.builderBinary ?? null;
+    api.on("before_tool_call", (event, ctx) => {
+      try {
+        const d = builderSpawnDecision(event.toolName, event.params, { agentId: ctx?.agentId, adminAgentId, fromOwner: ctx?.requester?.senderIsOwner === true, builderBinary });
+        if (!d) return;
+        log.info?.(`uno-guard: builder ${d.block ? "start blocked" : "start asks the owner"} for ${ctx?.agentId ?? "?"}`);
+        if (d.block) return { block: true, blockReason: d.block };
+        return routed() ? { requireApproval: d.ask } : { block: true, blockReason: "Starting the builder needs the owner's 👍, and approvals aren't set up." };
+      } catch { return /builder\.sh|sessions_spawn/.test(`${event?.toolName} ${event?.params?.command ?? ""}`) ? { block: true, blockReason: "Not available." } : undefined; }
+    }, GUARD);
+
+    // Scheduling outside the admin's chat (rules.js chatJobDecision).
+    const schedulingAgents = api.pluginConfig?.schedulingAgents ?? [];
+    api.on("before_tool_call", (event, ctx) => {
+      try {
+        const d = chatJobDecision(event.toolName, event.params, { agentId: ctx?.agentId, adminAgentId, schedulingAgents });
+        if (d?.block) log.info?.(`uno-guard: scheduling blocked for ${ctx?.agentId ?? "?"}`);
+        return d ?? undefined;
+      } catch { return ["automations", "cron"].includes(event?.toolName) && ctx?.agentId !== adminAgentId ? { block: true, blockReason: "Not available." } : undefined; }
     }, GUARD);
 
     // Shell log: every shell-type tool call, appended to shell-commands.jsonl (0600).
@@ -281,8 +256,6 @@ export default {
           log.info?.(`uno-guard: admin browser ${event.params?.action ?? "?"}${url ? ` ${siteOf(url) ?? "?"}` : ""} -> ${profile}${event.params?.profile ? ` (asked ${event.params.profile})` : ""}`);
           return profile === event.params?.profile ? undefined : { params: { ...(event.params ?? {}), profile } };
         }
-        const site = siteToolDecision(event.toolName, event.params, siteRole(ctx?.agentId, sites));
-        if (site) { if (site.block) log.info?.(`uno-guard: ${event.toolName} blocked for ${ctx?.agentId}`); return site; }
         const decision = browserDecision(event.toolName, event.params, ctx?.agentId, adminAgentId);
         const upload = decision?.params ? uploadDecision(event.params, ctx?.agentId, mediaOwners) : null;
         if (upload) { log.info?.(`uno-guard: browser upload blocked for ${ctx?.agentId}`); return upload; }
@@ -312,29 +285,6 @@ export default {
         }
         const approval = approvalOrBlock(approvalFor(event.toolName, event.params ?? {}, { owners, current, sink: testSink }), ctx?.agentId, adminAgentId, askers());
         if (approval) { if (approval.block) log.info?.(`uno-guard: ${event.toolName} to others blocked for ${ctx?.agentId}`); return approval; }
-        const role = siteRole(ctx?.agentId, sites);
-        if (event.toolName === "change_check") {
-          if (role?.role !== "chat") return { block: true, blockReason: "Not available." };
-          const d = changeCheck(event.params ?? {});
-          log.info?.(`uno-guard: website change ${d.block ? "unclear" : d.allow ? "small" : "large, needs the owner's approval"} for ${ctx?.agentId}`);
-          if (d.block) return { block: true, blockReason: d.block };
-          if (d.ask) return routed() ? { requireApproval: d.ask } : { block: true, blockReason: "Large changes need the owner's OK, and approvals aren't set up. Tell them to ask the owner." };
-          return;
-        }
-        if (event.toolName === "site_deploy") {
-          const d = deployDecision(event.params ?? {}, role);
-          if (d.block) return { block: true, blockReason: d.block };
-          log.info?.(`uno-guard: website deploy ${d.ask ? "needs the owner's approval" : "automatic"} for ${ctx?.agentId}`);
-          if (d.ask) return routed() ? { requireApproval: d.ask } : { block: true, blockReason: "Deploys need the owner's OK, and approvals aren't set up." };
-          return;
-        }
-        const ship = coderShellDecision(event.toolName, event.params, role);
-        if (ship) { log.info?.(`uno-guard: coder ship command blocked for ${ctx?.agentId}`); return ship; }
-        if (event.toolName === "sessions_spawn" && role) {
-          const d = siteSpawnDecision(event.params ?? {}, role, cleared(ctx?.sessionKey ?? "none"));
-          if (d?.block) log.info?.(`uno-guard: start ${event.params?.agentId ?? "?"} blocked for ${ctx?.agentId}`);
-          return d ?? undefined;
-        }
         if (event.toolName === "purchase_check") {
           const d = purchaseCheck(event.params ?? {}, { mode: purchases, limit: purchaseLimit, freeSites: purchaseFreeSites });
           log.info?.(`uno-guard: purchase ${d.block ? "off" : d.free ? "on a no-approval site" : d.allow ? "under the limit" : "needs the owner's approval"} for ${ctx?.agentId}${d.amount != null ? ` ($${d.amount.toFixed(2)})` : ""}`);
@@ -352,8 +302,6 @@ export default {
         const key = String(ctx?.sessionKey ?? "");
         const agentId = ctx?.agentId ?? agentOfSession(key);
         if (!key.includes(":imessage:") || !agentId || agentId === fallbackAgentId) return;
-        const role = siteRole(agentId, sites);
-        if (role) return role.role === "chat" ? { appendContext: siteNote({ ownerName, site: role.site }) } : undefined;
         const admin = agentId === adminAgentId;
         const pim = admin ? null : (() => { try { return JSON.parse(readFileSync(join(PIM_ROOT, agentId, "config.json"), "utf8")); } catch { return null; } })();
         const entry = api.config?.agents?.entries?.[agentId] ?? {};
@@ -403,7 +351,7 @@ export default {
       try {
         const names = api.config?.plugins?.entries?.["uno-family-memory"]?.config?.names ?? {};
         const groupAgents = (api.config?.bindings ?? []).filter((b) => b?.match?.peer?.kind === "group").map((b) => b.agentId);
-        const plain = cleanApprovalPrompt(p, approvalFrom(p.agent, { adminAgentId, names, sites, groupAgents }));
+        const plain = cleanApprovalPrompt(p, approvalFrom(p.agent, { adminAgentId, names, groupAgents }));
         const guid = sendPlainApproval(event.to, plain);
         if (!guid) { log.warn?.("uno-guard: plain approval not sent; OpenClaw's prompt goes out"); return; }
         writePending([...readPending().filter((e) => e.id !== p.id), { id: p.id, guid, owner: bare(event.to), t: Date.now() }]);

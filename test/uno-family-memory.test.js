@@ -144,6 +144,11 @@ test("profile_save writes USER.md; the file tools and tainted turns can't", asyn
     assert.ok(run("before_tool_call", { toolName: "profile_save", params: {} }, ctx).block);
     assert.equal(run("before_tool_call", { toolName: "profile_save", params: {} }, { ...ctx, runId: "run-2" }), undefined);
     assert.ok(run("before_tool_call", { toolName: "profile_save", params: {} }, { agentId: "sam" }).block); // no run or session: refused
+    // An eval session: a save is reported done, never written; after outside content it's refused.
+    const test = { agentId: "sam", sessionKey: "agent:sam:test:eval-a-1", runId: "run-t" };
+    assert.match(run("before_tool_call", { toolName: "profile_save", params: {} }, test).blockReason, /^Done: saved\./);
+    run("before_tool_call", { toolName: "web_fetch", params: {} }, test);
+    assert.match(run("before_tool_call", { toolName: "profile_save", params: {} }, test).blockReason, /outside content/);
     const ro = await tools.profile_save({ agentId: "family", sessionKey: "agent:family:main" }).execute("2", { content: "# About you\n\n- Never\n" });
     assert.equal(ro.details.saved, false);
     rmSync(join(root, "USER.md")); symlinkSync(join(root, "elsewhere.md"), join(root, "USER.md"));

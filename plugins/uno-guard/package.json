@@ -2,6 +2,32 @@
   "name": "uno-guard",
   "version": "0.1.0",
   "private": true,
+  "description": "Uno's guardrails: whom it texts and emails, approvals, purchases, and per-agent scoping.",
+  "license": "MIT",
   "type": "module",
-  "openclaw": { "extensions": ["./index.js"] }
+  "os": [
+    "darwin"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.9.6"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.9.6"
+    },
+    "install": {
+      "minHostVersion": ">=2026.9.6"
+    },
+    "build": {
+      "openclawVersion": "2026.9.7"
+    }
+  }
 }

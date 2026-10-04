@@ -21,5 +21,8 @@
         "description": "Got-it reaction on their message when Uno starts a browser task. Default 👀."
       }
     }
-  }
+  },
+  "requiresPlugins": [
+    "uno-guard"
+  ]
 }

@@ -4,7 +4,7 @@
   "description": "Notes, Maps, Music and Files as gateway tools, scoped per agent: each listed agent gets its own Notes folder and iCloud Drive folder. Unlisted agents get nothing.",
   "version": "0.1.0",
   "categories": [
-    "other"
+    "productivity"
   ],
   "activation": {
     "onStartup": true
@@ -18,10 +18,18 @@
     ]
   },
   "toolMetadata": {
-    "apple_notes": { "optional": true },
-    "apple_maps": { "optional": true },
-    "apple_music": { "optional": true },
-    "apple_files": { "optional": true }
+    "apple_notes": {
+      "optional": true
+    },
+    "apple_maps": {
+      "optional": true
+    },
+    "apple_music": {
+      "optional": true
+    },
+    "apple_files": {
+      "optional": true
+    }
   },
   "configSchema": {
     "type": "object",

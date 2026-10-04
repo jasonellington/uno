@@ -18,7 +18,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { checkReaction, isErrorReply, errorReplyFor, norm, soleUrl, chatLookup, noEmDash, latestInboundQuery, customEmoji, sendCustomReaction, ownMessageRedirect, emojiOnly, CUSTOM_CONFIRM_SQL, isTrailingError, conversationKeys, ACK_EMOJI, ACK_AFTER_MS, CLASSIC_EMOJI_OF, ACK_TOOLS, ANSWERED_SINCE_SQL, ANSWERED_TEXT_SQL, typingMs, firstChatNote, splitBubbles, bubbleTypingMs, tapbackFor, leadingReaction, groupChatOf, inThisChat, GROUP_STYLE, dropOpeningName, linkBubbles, keepBlockedLinksInline, shareLinkFor, isBotCheckTitle, isRestartNotice, isApprovalPrompt, sandboxedSession, agentsMdContext, chatTurn, callTurn, replyNote, callNote, guidReplyTarget, THREAD_TARGET_SQL, appleTime, bubbleArgs } from "./rules.js";
+import { checkReaction, isErrorReply, errorReplyFor, norm, soleUrl, chatLookup, noEmDash, latestInboundQuery, customEmoji, sendCustomReaction, ownMessageRedirect, emojiOnly, CUSTOM_CONFIRM_SQL, isTrailingError, conversationKeys, ACK_EMOJI, ACK_AFTER_MS, CLASSIC_EMOJI_OF, ACK_TOOLS, ANSWERED_SINCE_SQL, ANSWERED_TEXT_SQL, typingMs, firstChatNote, splitBubbles, bubbleTypingMs, tapbackFor, leadingReaction, groupChatOf, inThisChat, GROUP_STYLE, dropOpeningName, linkBubbles, keepBlockedLinksInline, shareLinkFor, isBotCheckTitle, isRestartNotice, isApprovalPrompt, sandboxedSession, agentsMdContext, chatTurn, callTurn, replyNote, callNote, callTextHandle, testAutomation, testMessage, testSave, isTestSession, isDirectChat, sentFrom, outsideSendNote, testSideEffect, guidReplyTarget, THREAD_TARGET_SQL, appleTime, bubbleArgs } from "./rules.js";
 import { execFile, execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -145,6 +145,8 @@ export default {
         }
       } catch {}
       try {
+        const testJob = testAutomation(event.toolName, event.params, ctx?.sessionKey) ?? testMessage(event.toolName, event.params, ctx?.sessionKey) ?? testSave(event.toolName, event.params, ctx?.sessionKey) ?? testSideEffect(event.toolName, event.params, ctx?.sessionKey);
+        if (testJob) { log.info?.(testJob.log); return testJob.result; }
         const action = event.params?.action;
         if (event.toolName !== "message" || (action !== "react" && action !== "reply")) return;
         // Test sessions (agent:<id>:test:…, the evals) have no real message to
@@ -244,11 +246,10 @@ export default {
       try { return withDb((db) => db.prepare("SELECT style FROM chat WHERE ROWID = ?").get(Number(id)))?.style === GROUP_STYLE; } catch { return false; }
     };
     // First names Uno might open a group reply with: the owner, each
-    // person's agent (uno-family-memory names) and website owners.
+    // person's agent (uno-family-memory names).
     const householdNames = () => {
       const plugins = api.config?.plugins?.entries ?? {};
-      return [ownerName, ...Object.values(plugins["uno-family-memory"]?.config?.names ?? {}),
-        ...Object.values(plugins["uno-guard"]?.config?.sites ?? {}).map((x) => x?.person)].filter(Boolean);
+      return [ownerName, ...Object.values(plugins["uno-family-memory"]?.config?.names ?? {})].filter(Boolean);
     };
     const tapback = (to, messageGuid, kind) => {
       const guid = chatGuid(to);
@@ -441,7 +442,8 @@ export default {
         const agents = api.config?.agents ?? {};
         const ws = String(agents.entries?.[ctx?.agentId]?.workspace ?? agents.defaults?.workspace ?? "~/.openclaw/workspace").replace(/^~(?=\/)/, homedir());
         const file = join(ws, name);
-        const note = existsSync(file) ? (name === "CALL.md" ? callNote : replyNote)(readFileSync(file, "utf8")) : null;
+        const text = existsSync(file) ? readFileSync(file, "utf8") : null;
+        const note = !text ? null : name === "CALL.md" ? callNote(text, callTextHandle(api.config?.plugins?.entries?.facetime?.config?.ownerHandles)) : replyNote(text);
         if (note) return { appendContext: note };
       } catch {}
     });
@@ -471,7 +473,40 @@ export default {
       } catch {}
     });
 
+    // Texts sent from outside a chat's own conversation (rules.js
+    // outsideSendNote): the handle -> chat map lives in a file, since plugin
+    // copies don't share memory.
+    const DM_FILE = join(homedir(), ".openclaw", "uno-data", "dm-sessions.json");
+    const dmSessions = () => { try { return JSON.parse(readFileSync(DM_FILE, "utf8")); } catch { return {}; } };
+    api.on("message_received", (event, ctx) => {
+      try {
+        const key = ctx?.sessionKey, who = norm(ctx?.senderId ?? event?.from);
+        if (!isDirectChat(key) || !who) return;
+        const map = dmSessions();
+        if (map[who] === key) return;
+        map[who] = key;
+        writeFileSync(DM_FILE, JSON.stringify(map), { mode: 0o600 });
+      } catch {}
+    });
+    api.on("message_sent", async (event, ctx) => {
+      try {
+        if (!event?.success) return;
+        const chatSession = dmSessions()[norm(event.to)];
+        const fromSession = event.sessionKey ?? ctx?.sessionKey;
+        const text = outsideSendNote({ fromSession, chatSession, content: event.content, at: new Date().toLocaleString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", month: "short", day: "numeric" }) });
+        if (!text) return;
+        const enqueue = api.session?.workflow?.enqueueNextTurnInjection ?? api.enqueueNextTurnInjection;
+        if (!enqueue) return;
+        await enqueue({ sessionKey: chatSession, text, idempotencyKey: `sent-${event.messageId ?? `${fromSession}-${Date.now()}`}`, ttlMs: 7 * 24 * 3600 * 1000 });
+        log.info?.(`uno-imsg-proxy: queued a note for ${chatSession} about a text sent from ${sentFrom(fromSession)}`);
+      } catch (err) { log.warn?.(`uno-imsg-proxy: couldn't queue a sent-text note: ${err?.message ?? err}`); }
+    });
+
     api.on("message_sending", async (event, ctx) => {
+      if (isTestSession(ctx?.sessionKey)) {
+        log.info?.(`uno-imsg-proxy: cancelled a send from test session ${ctx.sessionKey}`);
+        return { cancel: true, cancelReason: "test session" };
+      }
       const sendStart = Date.now();
       const keys = [ctx?.sessionKey, event.to, ctx?.conversationId];
       if (String(event.content ?? "").includes(TAPBACK_SENTINEL)) return { cancel: true, cancelReason: "answered with a tapback" };

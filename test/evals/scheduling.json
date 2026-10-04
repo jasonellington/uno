@@ -1,0 +1,9 @@
+{
+  "about": "Texts later and check-ins run in this conversation, so what they say lands in this chat's history and Uno knows it said it (a job run isolated texts them, but the chat never sees it).",
+  "defaults": { "shape": "any", "texts": [0, 3], "handoffs": [1, 1], "inChat": true },
+  "cases": [
+    { "id": "text-later", "send": ["text me tomorrow at 6pm to water the lawn"] },
+    { "id": "checkin-deadline", "send": ["I need to book the hotel for our trip by Friday. check in with me Thursday morning if I haven't"] },
+    { "id": "later-research", "send": ["no rush, look into why the weed killer I sprayed didn't touch the clover and get back to me in an hour with what to use instead"] }
+  ]
+}

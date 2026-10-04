@@ -1,11 +1,11 @@
 ---
 name: uno-one-person
-description: Keeps Uno one person across every chat - the owner's one-on-one, each person's own one-on-one and every group chat. Use for any change to how Uno talks, reacts, formats or does things (persona files, plugin behavior, prompts) and when testing one - install it for every Uno agent and test it on more than one.
+description: Keeps Uno one person across every chat - the owner's one-on-one and the family group chat. Use for any change to how Uno talks, reacts, formats or does things (persona files, plugin behavior, prompts) and when testing one - install it for every Uno agent and test it on more than one.
 ---
 
 # Uno is one person
 
-Everyone texts the same Uno. The owner's one-on-one, each household member's one-on-one and each group chat run as separate OpenClaw agents only so that access and memory stay separate. The persona, tone, formatting, reactions and ways of doing things are the same in all of them.
+Everyone texts the same Uno. The owner's one-on-one and the family group chat run as separate OpenClaw agents (there are no per-person one-on-one agents) only so that access and memory stay separate. The persona, tone, formatting, reactions and ways of doing things are the same in all of them.
 
 ## Changing behavior
 

@@ -2,6 +2,32 @@
   "name": "uno-apple-tools",
   "version": "0.1.0",
   "private": true,
+  "description": "Notes, Maps, Music and Files as gateway tools, scoped per agent: each listed agent gets its own Notes folder and iCloud Drive folder. Unlisted agents get nothing.",
+  "license": "MIT",
   "type": "module",
-  "openclaw": { "extensions": ["./index.js"] }
+  "os": [
+    "darwin"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.9.6"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.9.6"
+    },
+    "install": {
+      "minHostVersion": ">=2026.9.6"
+    },
+    "build": {
+      "openclawVersion": "2026.9.7"
+    }
+  }
 }

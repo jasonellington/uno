@@ -3,7 +3,7 @@
   "name": "Uno shared family memory",
   "description": "Shared family memory, shared skills and the USER.md save tool.",
   "categories": [
-    "other"
+    "memory"
   ],
   "contracts": {
     "tools": [
@@ -39,5 +39,11 @@
         "description": "Sites a skill must stick to, to be shared. Unset: uno-guard's sharedSites."
       }
     }
+  },
+  "requiresPlugins": [
+    "uno-guard"
+  ],
+  "activation": {
+    "onStartup": true
   }
 }

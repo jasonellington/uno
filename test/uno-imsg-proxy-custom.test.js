@@ -100,9 +100,9 @@ test("plugin settings: defaults, trimming, overrides", async () => {
   assert.deepEqual(style.settings({ imsgPath: "/x/imsg", ackEmoji: "👍" }, { adminAgentId: " main ", ownerName: "Alex" }), { adminAgentId: "main", ownerName: "Alex", imsg: "/x/imsg", ackEmoji: "👍" });
   const guard = await import("../plugins/uno-guard/index.js");
   const { homedir } = await import("node:os");
-  assert.deepEqual(guard.settings({}), { adminAgentId: null, fallbackAgentId: null, ownerName: null, testSink: null, mailAddresses: {}, sharedSites: [], purchases: "off", purchaseLimit: 25, purchaseFreeSites: [], approvalAgents: [], familySpaces: {}, spaces: {}, sites: {}, logDir: `${homedir()}/.openclaw/uno-data` });
+  assert.deepEqual(guard.settings({}), { adminAgentId: null, fallbackAgentId: null, ownerName: null, testSink: null, mailAddresses: {}, sharedSites: [], purchases: "off", purchaseLimit: 25, purchaseFreeSites: [], approvalAgents: [], familySpaces: {}, spaces: {}, logDir: `${homedir()}/.openclaw/uno-data` });
   assert.deepEqual(guard.settings({ adminAgentId: " main ", fallbackAgentId: "catch", testSinkHandle: "+15555550142", sharedSites: [" Example.com ", ""], purchases: "limit", purchaseLimit: 10, approvalAgents: ["g"], spaces: { a: { notes: "A" } } }),
-    { adminAgentId: "main", fallbackAgentId: "catch", ownerName: null, testSink: "+15555550142", mailAddresses: {}, sharedSites: ["example.com"], purchases: "limit", purchaseLimit: 10, purchaseFreeSites: [], approvalAgents: ["g"], familySpaces: {}, spaces: { a: { notes: "A" } }, sites: {}, logDir: `${homedir()}/.openclaw/uno-data` });
+    { adminAgentId: "main", fallbackAgentId: "catch", ownerName: null, testSink: "+15555550142", mailAddresses: {}, sharedSites: ["example.com"], purchases: "limit", purchaseLimit: 10, purchaseFreeSites: [], approvalAgents: ["g"], familySpaces: {}, spaces: { a: { notes: "A" } }, logDir: `${homedir()}/.openclaw/uno-data` });
 });
 
 test("a react on Uno's own message is pointed at the sender's latest message", async () => {

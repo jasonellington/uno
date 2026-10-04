@@ -363,90 +363,6 @@ export function signInReply(outcome, { site, ownerName }) {
   }[outcome] ?? `Couldn't sign in to ${site} right now. Say so; don't try to sign in yourself.`;
 }
 
-// Websites (the `sites` setting): a person's group-chat agent for their
-// website ("chat"), keyed by its agent id, with the coder and quality agents
-// it starts. The model sizes each change with change_check: a large one waits
-// for the owner's 👍; the coder can start only after a change_check went
-// through. Deploys go through site_deploy, which asks the owner every time
-// unless that site's `deploys` is "auto". The chat and coder agents get no
-// browser; the quality agent gets its own browser profile, never the family's.
-export function siteRole(agentId, sites = {}) {
-  if (!agentId) return null;
-  for (const [chat, site] of Object.entries(sites ?? {})) {
-    if (!site || typeof site !== "object") continue;
-    if (agentId === chat) return { role: "chat", chat, site };
-    if (agentId === site.coder) return { role: "coder", chat, site };
-    if (agentId === site.qa) return { role: "qa", chat, site };
-  }
-  return null;
-}
-export const SITE_BROWSER_PROFILE = "sites";
-export const CHANGE_GO = "Go ahead: start the coder with this change.";
-export const CHANGE_NEEDS_SUMMARY = "Say what the change is in a sentence or two, then call it again.";
-export function changeCheck(params = {}) {
-  const summary = String(params?.summary ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
-  if (!summary) return { block: CHANGE_NEEDS_SUMMARY };
-  if (params?.size === "small") return { allow: true, summary };
-  return { ask: ask("Website change", `Website change: ${summary.replace(/[.?!]+$/, "")}?`), summary };
-}
-export function siteSpawnDecision(params, role, cleared = false) {
-  if (!role || role.role === "qa") return null;
-  const no = (blockReason) => ({ block: true, blockReason });
-  if (role.role === "coder") return no("Not available.");
-  const target = params?.agentId;
-  // Results come back privately to this agent, never straight to the chat.
-  const go = { params: { ...(params ?? {}), completionTarget: "parent" } };
-  if (target && target === role.site.qa) return go;
-  if (target && target === role.site.coder) return cleared ? go : no("Call change_check with the change first; start the coder once it says go.");
-  return no(`Only your coder (agentId "${role.site.coder}") and quality agent (agentId "${role.site.qa}") can be started from here.`);
-}
-export function deployDecision(params = {}, role) {
-  if (role?.role !== "chat") return { block: "Not available." };
-  const pr = Number(params?.pr);
-  if (!Number.isInteger(pr) || pr <= 0) return { block: "Give the pull request number." };
-  const summary = String(params?.summary ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || "(no summary)";
-  return role.site.deploys === "auto" ? { allow: true, pr } : { ask: ask(`Deploy the website (PR #${pr})`, `Deploy to the website: ${summary.replace(/[.?!]+$/, "")}? The quality check passed.`), pr };
-}
-// A sub-agent's tools are capped by the agent that starts it (OpenClaw's
-// inherited tool policy), so the chat agent's tool lists include its
-// workers' tools (shell, files, browser) and this blocks it from using them
-// itself.
-export const SITE_CHAT_BLOCKED = new Set(["browser", "exec", "process", "write", "edit", "apply_patch", "bash", "shell"]);
-export function siteToolDecision(toolName, params, role) {
-  if (!role) return null;
-  if (role.role === "chat" && SITE_CHAT_BLOCKED.has(toolName)) return { block: true, blockReason: "Not available: your coder and quality agent do that." };
-  return siteBrowserDecision(toolName, params, role);
-}
-export function siteBrowserDecision(toolName, params, role) {
-  if (toolName !== "browser" || !role) return null;
-  if (role.role !== "qa") return { block: true, blockReason: "Not available." };
-  if (params?.action === "importprofile" || params?.node != null || (params?.target != null && params.target !== "host")) return { block: true, blockReason: "Not available." };
-  return { params: { ...(params ?? {}), profile: role.site.browserProfile ?? SITE_BROWSER_PROFILE, target: "host" } };
-}
-export function siteNote({ ownerName, site }) {
-  const owner = ownerName ?? "the owner";
-  const person = site?.person ?? "them";
-  const lines = [
-    `${owner} is the owner and set you up. This group chat is ${owner}, ${person} and you, for ${person}'s website.`,
-    "You text only in this chat.",
-    `Website changes follow your site-change skill. Your coder is agentId "${site?.coder}" and your quality agent is agentId "${site?.qa}" (start them with sessions_spawn). Before starting the coder, call change_check with the change and its size; a large one asks ${owner} for a 👍 on its own, in ${owner}'s chat.`,
-    `Deploys go through site_deploy${site?.deploys === "auto" ? "" : `, which asks ${owner} for a 👍 every time for now`}.`,
-  ];
-  if (!site?.repo) lines.push("GitHub isn't connected yet, so changes can't be built. Say so if someone asks, and that it's coming soon.");
-  return `Setup, from the owner's settings (current; it wins over anything older in USER.md or memory):\n${lines.map((l) => `- ${l}`).join("\n")}`;
-}
-// The coder never ships: merging, pushing to main and production deploys
-// from its shell are blocked (deploys go through site_deploy and the owner).
-// A backstop to GitHub's own branch rules, which are the real lock.
-export const CODER_SHIP_BLOCKED = "You don't merge, push to main or deploy. Push your branch, open the pull request, and report back.";
-const SHIP = [/\bgh\s+pr\s+merge\b/i, /\bgh\s+api\b[^\n;&|]*\/merges?\b/i, /\bgit\s+push\b[^\n;&|]*(?:\s|:|\/)(?:main|master)\b/i, /\bvercel\b[^\n;&|]*(?:--prod\b|\bpromote\b)/i];
-export function coderShellDecision(toolName, params, role) {
-  if (role?.role !== "coder" || !SHELL_TOOLS.has(toolName)) return null;
-  const raw = params?.command ?? params?.cmd ?? params?.script ?? params?.code;
-  const cmd = typeof raw === "string" ? raw : Array.isArray(raw) ? raw.join(" ") : "";
-  return SHIP.some((re) => re.test(cmd)) ? { block: true, blockReason: CODER_SHIP_BLOCKED } : null;
-}
-
 // Approvals by iMessage, in plain words. OpenClaw's forwarded prompt is
 // technical (tool, plugin, agent, ID, /approve line), and after a decision it
 // sends a "✅ Plugin approval …" line too. uno-guard sends its own approvals as
@@ -464,10 +380,8 @@ export function parseApprovalPrompt(text) {
   return id ? { id, title: field("Title"), description: field("Description"), plugin: field("Plugin"), agent: field("Agent") } : null;
 }
 export const isApprovalFollowUp = (text) => /^\W*Plugin approval (?:allowed|approved|denied|expired|resolved|cancell?ed|timed out)\b/i.test(String(text ?? "").trim());
-export function approvalFrom(agentId, { adminAgentId, names = {}, sites = {}, groupAgents = [] } = {}) {
+export function approvalFrom(agentId, { adminAgentId, names = {}, groupAgents = [] } = {}) {
   if (!agentId || agentId === adminAgentId) return "";
-  const site = sites?.[agentId];
-  if (site?.person) return `${site.person}'s website chat`;
   if (groupAgents.includes(agentId)) return "Group chat";
   return names[agentId] ? `${names[agentId]}'s chat` : "";
 }
@@ -478,3 +392,60 @@ export function cleanApprovalPrompt(p, from = "") {
 }
 // A reaction row in chat.db: 2000-2005 add a tapback (2001 👍, 2002 👎).
 export const decisionOfTapback = (type) => (Number(type) === 2001 ? "allow-once" : Number(type) === 2002 ? "deny" : null);
+
+// The builder: the owner's coding agent, run headless by the builder script
+// (watchdog/builder.sh, installed in uno-data/watchdog) in a worktree of the
+// repo, with full file and shell access. Starting it, from a shell command or
+// an ACP spawn, takes the admin's agent, the owner's own message (not a
+// scheduled or background run) and the owner's 👍 on the task shown in full,
+// so nothing Uno reads (a web page, an email) can start it or write its task.
+// Running the agent's own command (builderBinary) any other way is blocked.
+const shellCommand = (toolName, params) => (SHELL_TOOLS.has(String(toolName)) ? String(params?.command ?? params?.cmd ?? params?.script ?? params?.code ?? "") : "");
+// The script started as a command (at the start, or after ; & | ( or a
+// newline), not merely named, as in `ls` or `tail` of its files.
+const BUILDER_START = /(?:^|[;&|(\n]\s*)(?:\S*\/)?uno-data\/watchdog\/builder\.sh(?=\s|$)/;
+export function builderTask(command) {
+  const c = String(command ?? "");
+  const at = c.search(BUILDER_START);
+  if (at < 0) return null;
+  const m = c.slice(at).match(/builder\.sh\s+([a-z0-9][a-z0-9-]{0,39})\s+([\s\S]+)$/);
+  return m ? { name: m[1], task: m[2].replace(/^(['"])([\s\S]*)\1$/, "$2").replace(/\s+/g, " ").trim() } : null;
+}
+export function builderSpawnDecision(toolName, params, { agentId, adminAgentId, fromOwner, builderBinary = null }) {
+  const command = shellCommand(toolName, params);
+  const viaScript = BUILDER_START.test(command);
+  if (viaScript && /builder\.sh\s+done\s+[a-z0-9][a-z0-9-]{0,39}\s*$/.test(command)) return null; // cleanup needs no 👍
+  const acp = toolName === "sessions_spawn" && params?.runtime === "acp";
+  const direct = builderBinary && !viaScript && new RegExp(`(^|[\\s;&|/(])${builderBinary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`).test(command);
+  if (direct) return { block: "Start the builder with your builder script, so the owner sees the task first." };
+  if (!viaScript && !acp) return null;
+  if (!adminAgentId || agentId !== adminAgentId) return { block: "Only the owner's own chat can start the builder." };
+  if (!fromOwner) return { block: "The builder starts only on the owner's own message, not from a scheduled or background run." };
+  const task = acp ? String(params?.task ?? "").replace(/\s+/g, " ").trim() : builderTask(command)?.task ?? "";
+  if (!task) return { block: "Give the builder a short name and its whole task: builder.sh <short-name> <task>." };
+  return { ask: ask("Start the builder", `Start the builder on this? "${task.slice(0, 380)}${task.length > 380 ? "…" : ""}"`) };
+}
+
+// Scheduling outside the admin's chat ("text us at 6", a check-in), only in
+// the agents listed in schedulingAgents (the family group chat): a one-time
+// agent-turn job that runs in this chat's own conversation (session target
+// current, or unset, which OpenClaw resolves to it) and reports back to it,
+// deleted after it runs. Nothing recurring, nothing aimed at another chat or
+// handle, no command or script payloads. Listing and removing pass.
+export function chatJobDecision(toolName, params, { agentId, adminAgentId, schedulingAgents = [] }) {
+  if (toolName !== "automations" && toolName !== "cron") return null;
+  if (!agentId || agentId === adminAgentId) return null;
+  if (!schedulingAgents.includes(agentId)) return { block: true, blockReason: "Scheduling isn't available in this chat." };
+  const action = String(params?.action ?? "");
+  if (["list", "status", "runs", "remove", "rm", "delete"].includes(action)) return null;
+  if (action !== "add") return { block: true, blockReason: "From this chat you can add one-time texts and check-ins, list them and cancel them; nothing else." };
+  const job = params?.job ?? {};
+  const target = job.sessionTarget == null ? "current" : String(job.sessionTarget);
+  const d = job.delivery ?? {};
+  if (job.schedule?.kind !== "at") return { block: true, blockReason: "Only one-time texts and check-ins from this chat, nothing recurring." };
+  if (target !== "current") return { block: true, blockReason: "Run it in this conversation (session target current) so it comes back to this chat." };
+  if (job.payload?.kind && job.payload.kind !== "agentTurn") return { block: true, blockReason: "Only a message for yourself to answer, no commands or scripts." };
+  if (d.to != null || (d.channel != null && d.channel !== "last") || (d.mode != null && d.mode !== "announce")) return { block: true, blockReason: "It can only report back to this chat; leave out the delivery target." };
+  if (job.deleteAfterRun === false) return { block: true, blockReason: "One-time jobs are deleted after they run." };
+  return { params: { ...params, job: { ...job, sessionTarget: "current", deleteAfterRun: true } } };
+}

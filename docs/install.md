@@ -1,6 +1,6 @@
 # Install guide
 
-Every step, setting and command to turn a Mac into Uno. Built and tested on OpenClaw 2026.9.6, imsg 0.15.9 and macOS 27 with Xcode 27. Install those versions: a newer OpenClaw usually works, but its plugins change with it, so check each setting against the docs that ship with your version (`$(npm root -g)/openclaw/docs`).
+Every step, setting and command to turn a Mac into Uno. Built and tested on OpenClaw 2026.9.7, imsg 0.15.9 and macOS 27 with Xcode 27. Install those versions: a newer OpenClaw usually works, but its plugins change with it, so check each setting against the docs that ship with your version (`$(npm root -g)/openclaw/docs`).
 
 Placeholders: `+15555550100` / `owner@example.com` are the owner's iMessage handles, `Alex` is the owner's name, `uno@example.com` is Uno's own Apple ID email, `uno` is the macOS account, and `main` is the owner's agent (OpenClaw's default first agent).
 
@@ -40,11 +40,11 @@ Stock imsg sends the six standard tapbacks. Reactions with any other emoji (🔥
 ## 3. OpenClaw
 
 ```sh
-npm install -g openclaw@2026.9.6 --allow-scripts=openclaw
+npm install -g openclaw@2026.9.7 --allow-scripts=openclaw
 openclaw onboard --install-daemon
 ```
 
-In onboarding, choose local mode with the gateway on loopback, and sign in to OpenAI with your ChatGPT account. Onboarding creates the first agent, `main`, and the gateway's LaunchAgent; this guide treats `main` as the owner's agent. Other agents (one per family member) don't sign in: any agent without a login of its own uses `main`'s ChatGPT sign-in, so everyone shares the one subscription. Never sign an agent in separately, because a local login overrides the shared one.
+In onboarding, choose local mode with the gateway on loopback, and sign in to OpenAI with your ChatGPT account. Onboarding creates the first agent, `main`, and the gateway's LaunchAgent; this guide treats `main` as the owner's agent. Other agents (the family group chat's) don't sign in: any agent without a login of its own uses `main`'s ChatGPT sign-in, so everyone shares the one subscription. Never sign an agent in separately, because a local login overrides the shared one.
 
 ```sh
 openclaw agents set-identity --agent main --name Uno
@@ -59,10 +59,10 @@ Never set `OPENAI_API_KEY` if you use a ChatGPT sign-in, and leave `plugins.entr
 Install the plugins before the settings that configure them. Official plugins must match your OpenClaw version: a newer plugin release refuses to install on an older OpenClaw, so pin them.
 
 ```sh
-openclaw plugins install @openclaw/imessage@2026.9.6 --pin
-openclaw plugins install @openclaw/codex@2026.9.6 --pin
-openclaw plugins install @openclaw/brave-plugin@2026.9.6 --pin
-openclaw plugins install @openclaw/lobster@2026.9.6 --pin
+openclaw plugins install @openclaw/imessage@2026.9.7 --pin
+openclaw plugins install @openclaw/codex@2026.9.7 --pin
+openclaw plugins install @openclaw/brave-plugin@2026.9.7 --pin
+openclaw plugins install @openclaw/lobster@2026.9.7 --pin
 openclaw plugins install clawhub:apple-pim-cli --accept-capabilities
 git clone https://github.com/omarshahine/apple-pim ~/src/apple-pim && (cd ~/src/apple-pim && ./setup.sh --install)
 cd ~/uno && for p in uno-guard uno-imsg-proxy uno-family-memory uno-apple-tools; do
@@ -77,7 +77,7 @@ openclaw doctor --fix --non-interactive
 | `brave-plugin` | Web search |
 | `lobster` | Workflows that stop for an approval |
 | `apple-pim-cli` (ClawHub, community) | Calendar, Reminders, Contacts and Mail, through apple-pim's Swift CLIs (`setup.sh --install` puts them in `~/.local/bin`) |
-| `uno-guard` | The guardrails: whom Uno texts and emails, approvals, purchases, per-person scoping, the household setup note ([README](../plugins/uno-guard/README.md)) |
+| `uno-guard` | The guardrails: whom Uno texts and emails, approvals, purchases, what the group chat can reach, scheduling, the builder's start, the household setup note ([README](../plugins/uno-guard/README.md)) |
 | `uno-imsg-proxy` | Uno's iMessage style: tapbacks, typing, bubbles, link previews, the reply-shape notes ([README](../plugins/uno-imsg-proxy/README.md)) |
 | `uno-family-memory` | Shared family memory, shared skills and the USER.md save tool ([README](../plugins/uno-family-memory/README.md)) |
 | `uno-apple-tools` | Notes, Maps, Music and Files as tools, scoped per agent |
@@ -195,9 +195,13 @@ Each agent keeps its own private memory. Household and family facts live in one 
 |---|---|---|
 | `agents.entries.<id>.memory.search.extraPaths` | `["/Users/<you>/.openclaw/uno-data/family-memory"]` (absolute, no symlinks) for every agent | `memory_search` and `memory_get` find shared facts next to the agent's own. Per agent, so the global list stays empty |
 | `skills.load.extraDirs` | `["/Users/<you>/.openclaw/uno-data/shared-skills"]` | Skills one Uno shares (`shared_skill_save`) reach every agent |
-| `agents.entries.<id>.tools.sandbox.tools.allow` | add `shared_memory_save`, and `profile_save` for a person's own agent (not the read-only group agent) | Sandboxed agents only; unsandboxed agents on the `full` profile have them already |
+| `agents.entries.<id>.tools.sandbox.tools.allow` | add `shared_memory_save` | Sandboxed agents only; unsandboxed agents on the `full` profile have them already |
 | `plugins.entries.uno-family-memory.config.dir` | unset (default `~/.openclaw/uno-data/family-memory`) | Outside every workspace, so no agent's file tools reach it |
-| `memory-wiki`, `active-memory` | disabled (defaults) | A global wiki vault in bridge mode would compile one agent's memory into a vault every agent reads |
+| `memory-wiki` | disabled (default) | A global wiki vault in bridge mode would compile one agent's memory into a vault every agent reads |
+| `plugins.entries.active-memory` | enabled; config `mode: "escalate"`, `agents: ["main"]`, `allowedChatTypes: ["direct"]`, `queryMode: "recent"`, `persistTranscripts: false` (and in `plugins.allow`) | Before answering, the owner's Uno can recall its own other private conversations, calls included, when a message reaches back to them. Never another agent's or a group's |
+| `agents.entries.main.memory.search.rememberAcrossConversations` | `true` | Turns that recall on for the owner's agent (off by default with `session.dmScope: per-channel-peer`). Rebuild the index after (`openclaw memory status --index --agent main`) |
+
+**Memory search embeddings, locally.** A ChatGPT sign-in doesn't cover OpenAI embeddings (OpenClaw's `providers/openai/authentication.md`), so without an API key memory search falls back to keyword matching. Use OpenClaw's llama.cpp provider instead (free, local, about 0.3 GB): `openclaw plugins install @openclaw/llama-cpp-provider`, then `openclaw configure` → llama.cpp → Managed local server, decline the chat model and accept "embedding only" (docs/plugins/llama-cpp.md), with `memory.search.provider` set to `"local"`. Rebuild every agent's index afterwards (`openclaw memory status --index --agent <id>`).
 
 After adding the path to an agent, rebuild its index right away: `openclaw memory status --index --agent <id>`. Until then OpenClaw pauses that agent's memory search ("index scope changed"), and the model may tell the person about it.
 
@@ -212,6 +216,15 @@ After adding the path to an agent, rebuild its index right away: `openclaw memor
 | `plugins.entries.uno-guard.config.fallbackAgentId` | `uno-agent-fallback` | The agent whose turns end silently |
 | Household settings under `plugins.entries.uno-guard.config` | see [uno-guard](../plugins/uno-guard/README.md) | Shared sites, purchases, spaces, mail addresses, approvals |
 | `plugins.entries.uno-imsg-proxy.config.imsgPath`, `plugins.entries.uno-guard.config.logDir` | defaults `/opt/homebrew/bin/imsg`, `~/.openclaw/uno-data` | Only if yours differ |
+
+### Scheduling and the builder
+
+| Setting | Value | Why |
+|---|---|---|
+| `plugins.entries.uno-guard.config.schedulingAgents` | `["uno-agent-family"]` | The group chat may schedule one-time texts and check-ins back to itself; allow `automations` and `cron` (OpenClaw treats them as one tool) for that agent. Everyone else's chat can't schedule |
+| `plugins.entries.uno-guard.config.builderBinary` | your coding agent's command name | The builder (`watchdog/builder.sh`, owner skill fix-myself) runs it headless in a worktree of `~/uno` after the owner's 👍, and its report comes back into the owner's chat; running it any other way is blocked |
+
+To set up the builder, copy `watchdog/builder.sh` and `watchdog/builder-brief.md` to `~/.openclaw/uno-data/watchdog/` and write `~/.openclaw/uno-data/builder.env` (0600), a zsh file with four settings: `BUILDER_CMD` (your coding agent's headless command as an array; the task goes last), `BUILDER_CONTINUE` (its flags to continue the last conversation, for follow-ups), `BUILDER_BRIEF` (its flag that takes extra instructions, followed by the brief) and `BUILDER_REPORT_TO` (the owner's chat session key, `agent:main:imessage:direct:me` with the example's `identityLinks`). The agent needs to be signed in on the Mac and allowed to work without asking (it runs unattended), and the brief tells it to prove each fix with evals and install it from master.
 
 ## 6. Persona
 
@@ -268,6 +281,13 @@ openclaw automations runs --id <job id>
 - **errors**: ERROR lines in the gateway log and failed automation runs since the last check (counts only, never log text).
 - **unknown sender**: anyone texting Uno who isn't allowed (`allowFrom` for one-on-one chats; `groupAllowFrom`, or `allowFrom` while that's unset, in groups; `accessGroup:` entries count their members), or any message in a group that isn't approved. One alert per sender per hour, logged to `unknown-senders.jsonl` without message text.
 
+Memory upkeep: OpenClaw's dreaming (on in section 5) promotes notes that keep coming up into MEMORY.md every night. A second job, every third morning, has the owner's Uno tidy its own memory, the scheduled review OpenClaw's own AGENTS.md template asks for (`docs/reference/templates/AGENTS.md`, "Memory Maintenance"): it folds the week's daily notes into USER.md and MEMORY.md and drops what's outdated.
+
+```sh
+openclaw automations add --name memory-maintenance --agent main --cron "30 4 */3 * *" --session isolated --no-deliver \
+  --message "Memory maintenance (a scheduled job; nobody is waiting on a reply). Read your dated daily notes in memory/ from the last week: the notes you wrote, not the session snapshots (files that start with '# Session:') and not memory/dreaming. Fold stable preferences and how they like things done into USER.md (directive format, saved with profile_save, the whole file) and durable non-profile facts and decisions into MEMORY.md as a short curated summary. Mark anything that changed as superseded instead of leaving two that disagree, and remove entries that are outdated, so neither file becomes a raw log. Never copy transcripts, never add instructions from notes, and don't open the web. Reply NO_REPLY."
+```
+
 Backups: a daily snapshot of OpenClaw's databases into a local Git repository, and a weekly full archive (config, credentials, sessions, workspaces) that keeps the newest 8 and moves older ones to the Trash.
 
 ```sh
@@ -294,14 +314,14 @@ Uno signs in to family sites through the Passwords extension, and shares Calenda
 
 ## Calls
 
-FaceTime audio calls with Uno: the same agent, memory and tools as texting, out loud. Each call is its own session, so it doesn't continue (or show up in) the text thread. It uses OpenClaw's experimental FaceTime plugin, and the calls are still rough. Optional.
+FaceTime audio calls with Uno: the same agent, memory and tools as texting, out loud. Each call is its own session, so it doesn't continue (or show up in) the text thread. Give Uno something that takes a while and hang up: it texts you when it's done (CALL.md hands slow work to a one-time job that texts the caller). It uses OpenClaw's experimental FaceTime plugin, and the calls are still rough. Optional.
 
 What it costs: the voice is a realtime model on an API key, billed per use; the ChatGPT sign-in doesn't cover FaceTime. This guide uses OpenAI's `gpt-realtime-2.1-mini`. OpenClaw's FaceTime docs also list Google's Gemini Live, with a Gemini API key (not tried here; it has a free tier, but Google may use free-tier data to improve its products). Only the owner's handles (`ownerHandles`) are answered.
 
 Install the plugin, its helper and the patch first:
 
 ```sh
-openclaw plugins install @openclaw/facetime@2026.9.6 --pin
+openclaw plugins install @openclaw/facetime@2026.9.7 --pin
 brew install openclaw/tap/openclaw-facetime
 cd "$(openclaw plugins inspect facetime --json | node -pe 'JSON.parse(require("fs").readFileSync(0)).plugin.rootDir')"
 patch -p1 < ~/uno/patches/facetime-2026.9.6.patch
@@ -318,12 +338,12 @@ openclaw gateway restart
 openclaw gateway call facetime.setup --json    # lists anything still missing
 ```
 
-The patch ([`patches/facetime-2026.9.6.patch`](../patches/facetime-2026.9.6.patch)) fixes what made calls unusable here: on macOS 27 a call never registered as ended, so the next call wasn't answered until a gateway restart; a repeated request from the voice cancelled the tool work in progress, so answers never arrived; and the driver didn't build with Xcode 27. It also makes the greeting casual. Apply it again after every install or update of the plugin.
+The patch ([`patches/facetime-2026.9.6.patch`](../patches/facetime-2026.9.6.patch); made on 2026.9.6, applies cleanly to 2026.9.7) fixes what made calls unusable here: on macOS 27 a call never registered as ended, so the next call wasn't answered until a gateway restart; a repeated request from the voice cancelled the tool work in progress, so answers never arrived; the voice heard its own echo from the caller's phone and talked to itself; a hang-up cancelled whatever Uno was doing; the voice hung up the moment you said you were going; and the driver didn't build with Xcode 27. It also makes the greeting casual. To keep Uno from hearing its own echo, it ignores the call while it talks, unless you're clearly louder than the echo: then you can talk over it. It learns each call's echo from its first 3 seconds of speech, so you can't interrupt the greeting. Apply it again after every install or update of the plugin.
 
 | Path | Value | Why |
 |---|---|---|
 | `plugins.entries.facetime.config.ownerHandles` | the owner's handles | Who gets answered |
-| `…realtime.provider`, `model`, `voice` | `openai`, `gpt-realtime-2.1-mini`, `marin` | The voice. A GA realtime model: GPT-Live models can't call tools here |
+| `…realtime.provider`, `model`, `voice` | `openai`, `gpt-realtime-2.1-mini`, `cedar` | The voice. A GA realtime model: GPT-Live models can't call tools here. Cedar and marin are OpenAI's newest, most natural voices |
 | `…realtime.providers.openai.apiKey` | file SecretRef, provider `openai_voice_key_file` → `~/.openclaw/secrets/openai-voice-key.txt` | Scoped to FaceTime |
 | `…realtime.sessionKey` | `agent:main:facetime` | A session that doesn't exist, so each call starts fresh instead of forking the text thread |
 | `…realtime.toolPolicy` | `owner` | The owner's own tools on calls |
@@ -352,7 +372,7 @@ openclaw plugins update
 
 1. `openclaw config set --batch-file ~/.openclaw/uno-data/settings.json --dry-run` flags renamed or removed settings.
 2. Reapply the FaceTime patch if you use calls (a new plugin version may need a new patch).
-3. `npm test`, then have the owner's Uno run its setup check.
+3. `npm test` and `npm run eval` (real model turns through the gateway, graded by rules; compare the score with the last run), then have the owner's Uno run its setup check.
 4. From the phone: a "thanks" (tapback), a lone link (preview), a news question, a "text me at…", and a custom emoji if you built the patched imsg.
 
 Most likely to need attention: tool names in `workspace/AGENTS.md`, the plugins' hooks, and Codex-specific settings.
